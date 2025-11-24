@@ -1,3 +1,6 @@
 __pycache__
 output
-jobcollect/proxy.py
+proxy.py
+.depr
+.venv
+*.egg-info

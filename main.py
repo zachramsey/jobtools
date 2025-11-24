@@ -1,54 +1,44 @@
-from jobcollect import job_collector, PROXY  # type: ignore
+import pandas as pd
+from jobtools.jobsdata import deduplicate
+from jobtools.process import clean_description, generate_header_debug_str
+from jobtools.analysis import header_analysis
+from jobtools.utils import JTLogger
 
 
-results_wanted = 1000
-hours_old = 48
+def main():
+    logger = JTLogger()
+    logger.configure("INFO")
+    src_file = "output/jobs_data.csv"
+    snk_file = "output/description_headers.txt"
+    df = pd.read_csv(src_file)
+    # df["clean"] = df["description"].apply(clean_md)
+    # df["headers"] = df["clean"].apply(get_debugging)
 
-locations = ["United States"]
-# locations = ["Greater Seattle Area", "San Francisco Bay Area",
-#              "Portland, Oregon Metropolitan Area"]
+    logger.info(f"Loaded {len(df)} descriptions.")
+    df, n_rem = deduplicate(df)
+    df = df.reset_index(drop=True)
+    logger.info(f"Removed {n_rem} duplicates.")
+    logger.info(f"{len(df)} unique descriptions remain.")
 
-rl_include = ["Reinforcement Learning", "Optimal Control",
-              "Markov Decision Process", "Dynamic Programming"]
-rl_exclude = None
+    # df["description"] = df["description"].apply(clean_md)
+    # with open("output/description_texts.txt", "w", encoding="utf-8") as f:
+    #     for desc in df["description"]:
+    #         f.write("\n\n" + "-" * 60 + "\n\n")
+    #         f.write(desc)
 
-ml_include = ["Machine Learning", "Deep Learning", "Neural Network",
-              "Computer Vision"]
-ml_exclude = None
+    # Remove empty descriptions
+    df = df[df["description"].notna()].reset_index(drop=True)
 
-es_include = ["Embedded", "Firmware"]
-es_exclude = None
+    header_analysis(
+        texts=df["description"],
+        out_dir="output",
+    )
 
-search = {"Reinforcement Learning": (rl_include, rl_exclude),
-          "Machine Learning": (ml_include, ml_exclude),
-          "Embedded Systems": (es_include, es_exclude)}
-
-title_include = ["Engineer", "Developer", "Scientist", "Researcher"]
-
-title_exclude = ["Intern", "Senior", "Sr", "Principal", "Staff", "Manager", "\
-                 Director", "Lead", "VP", "Vice", "Head", "Chief"]
-
-descr_include = ["Bachelor", "Bachelors", "Bachelor's", "BS ", "BSE ", "BSc ",
-                 "B.S.", "B.Sc."]
-
-descr_exclude = ["LangChain", "LlamaIndex", "OpenAI API", "Haystack",
-                 "Prompt Engineer", "Prompt Engineering", "Prompt Design",
-                 "RAG", "Retrieval-Augmented Generation", "Vector Database",
-                 "Pinecone", "ChromaDB", "Weaviate"]
-
+    # # output descriptions to text file
+    # with open(snk_file, "w", encoding="utf-8") as f:
+    #     for headers in df["headers"]:
+    #         f.write("\n\n" + "-" * 60 + "\n\n")
+    #         f.write(headers)
 
 if __name__ == "__main__":
-    for group, (search_include, search_exclude) in search.items():
-        job_collector(
-            proxy=PROXY,
-            results_wanted=results_wanted,
-            hours_old=hours_old,
-            locations=locations,
-            group=group,
-            search_include=search_include,
-            search_exclude=search_exclude,
-            title_include=title_include,
-            title_exclude=title_exclude,
-            descr_include=descr_include,
-            descr_exclude=descr_exclude
-        )
+    main()

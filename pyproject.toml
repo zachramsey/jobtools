@@ -1,0 +1,9 @@
+[project]
+name = "jobtools"
+version = "0.2.0"
+description = "Tools for collecting, processing, and analyzing job postings."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-jobspy>=1.1.82",
+]
