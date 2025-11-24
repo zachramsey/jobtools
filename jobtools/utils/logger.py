@@ -2,7 +2,7 @@ import logging
 
 
 class JTLogger:
-    formatter = logging.Formatter(
+    _formatter = logging.Formatter(
         "{asctime} | {name:^8} | {levelname:^8} | {message}",
         datefmt="%H:%M:%S",
         style="{"
@@ -12,27 +12,32 @@ class JTLogger:
         self.logger = logging.getLogger("JobTools")
 
     def configure(self, level):
+        """ Configure the JTLogger instance. """
         self.set_level(level)
         self._add_handler()
         self.logger.propagate = False
 
     def debug(self, message):
+        """ Log a debug-level message. """
         self.logger.debug(f"{message}")
 
     def info(self, message):
+        """ Log an info-level message. """
         self.logger.info(f"{message}")
 
     def warning(self, message):
+        """ Log a warning-level message. """
         self.logger.warning(f"{message}")
-    
+
     def set_level(self, level):
+        """ Set the logging level. """
         levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if level in levels:
             self.logger.setLevel(level)
 
     def _add_handler(self):
         sh = logging.StreamHandler()
-        sh.setFormatter(self.formatter)
+        sh.setFormatter(self._formatter)
         self.logger.addHandler(sh)
 
         # Remove duplicate handlers
@@ -45,5 +50,5 @@ class JTLogger:
         logger = logging.getLogger(logger_name)
         for h in logger.handlers:
             if isinstance(h, logging.StreamHandler):
-                h.setFormatter(JTLogger.formatter)
+                h.setFormatter(JTLogger._formatter)
                 break

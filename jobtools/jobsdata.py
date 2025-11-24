@@ -7,7 +7,7 @@ import pandas as pd
 import re
 
 from . import HTMLBuilder
-from .utils import JTLogger
+from .utils.logger import JTLogger
 from .utils import parse_degrees, parse_location, build_regex
 
 
@@ -17,6 +17,7 @@ class JobsData:
 
     _logger = JTLogger()
     """ Logger instance for JobsData class. """
+    _logger.configure("WARNING")
     
     _converter = MarkdownConverter(bullets='*',
                                    default_title=True,
@@ -82,6 +83,22 @@ class JobsData:
             return self._new_path
         else:
             return self._load_path
+        
+    @property
+    def logger(self) -> JTLogger:
+        """ Get the JobsData logger instance. """
+        return self._logger
+        
+    @classmethod
+    def set_log_level(cls, level: str):
+        """ Set the logging level for the JobsData class.
+
+        Parameters
+        ----------
+        level : str
+            Logging level (e.g., "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL").
+        """
+        cls._logger.set_level(level)
 
     @classmethod
     def from_csv(cls, source: str) -> 'JobsData':

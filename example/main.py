@@ -1,7 +1,6 @@
 import datetime as dt
 from jobtools import JobsData
 from jobtools.utils import clean_description
-from jobtools.utils import JTLogger
 from proxy import PROXY
 from queries import SEARCH_STRINGS
 from priorities import KEYWORD_VALUE_MAP, STATE_RANK_ORDER
@@ -39,8 +38,8 @@ cluster: bool = False
 
 
 if __name__ == "__main__":
-    logger = JTLogger()
-    logger.configure("INFO")
+    # Configure logging
+    JobsData.set_log_level("INFO")
 
     # Initialize job collector
     jobs = JobsData().from_csv(source=load_data)
@@ -58,14 +57,14 @@ if __name__ == "__main__":
                                   proxy=PROXY,
                                   hours_old=hours_old)
             dur = (dt.datetime.now() - start).total_seconds()
-            logger.info(f"{group} > Collected {n_jobs} job postings in {dur:.1f}s")
+            jobs.logger.info(f"{group} > Collected {n_jobs} job postings in {dur:.1f}s")
 
             # Prioritize and deduplicate after collection
             jobs.prioritize(KEYWORD_VALUE_MAP, STATE_RANK_ORDER,
                             ["LinkedIn", "Indeed"], (5, -3, -3))
             n_rem = jobs.deduplicate()
-            logger.info(f"{group} > Removed {n_rem} duplicate job postings") 
-            logger.info(f"{group} > Found {n_jobs - n_rem} unique job postings")
+            jobs.logger.info(f"{group} > Removed {n_rem} duplicate job postings") 
+            jobs.logger.info(f"{group} > Found {n_jobs - n_rem} unique job postings")
 
             # Write local csv for this group
             if save_raw:
@@ -80,7 +79,7 @@ if __name__ == "__main__":
         g_jobs.prioritize(KEYWORD_VALUE_MAP, STATE_RANK_ORDER,
                           ["LinkedIn", "Indeed"], (5, -3, -3))
         n_rem = g_jobs.deduplicate()
-        logger.info(f"Global > Removed {n_rem} duplicate job postings")
+        g_jobs.logger.info(f"Global > Removed {n_rem} duplicate job postings")
         # Write updated global data
         g_jobs.export_csv()
 
@@ -88,7 +87,7 @@ if __name__ == "__main__":
     start = dt.datetime.now()
     jobs["description"] = jobs["description"].apply(clean_description)
     dur = (dt.datetime.now() - start).total_seconds()
-    logger.info(f"Cleaned {len(jobs)} descriptions in {dur:.1f}s")
+    jobs.logger.info(f"Cleaned {len(jobs)} descriptions in {dur:.1f}s")
 
     if filter:
         # Filter job postings
