@@ -8,16 +8,7 @@ import re
 
 from . import HTMLBuilder
 from .utils import JTLogger
-from .utils import parse_location, build_regex
-
-
-# Degree regex patterns and corresponding score adjustments
-bs_pat = r"\b(Degree in|Bachelor\'?s?|B\.?(?:S|Sc|A)\.?E?\.?\,?)\b"
-ms_pat = r"\b(Master\'?s?|M\.?(?:S|Sc|A)\.?E?\.?\,?)\b"
-phd_pat = r"\b(Ph\.?D\.?|Doctor(?:ate|al),?)\b"
-DEG_MAP = {"bachelor": (bs_pat, (5, -2, -3)),
-           "master": (ms_pat, (0, 5, -2)),
-           "doctorate": (phd_pat, (0, 0, 5))}
+from .utils import parse_degrees, parse_location, build_regex
 
 
 class JobsData:
@@ -170,18 +161,14 @@ class JobsData:
     
     def preprocess(self):
         """ Preprocess collected job postings. """
-        # Remove existing derived columns if present
-        for col in ["city", "state", "terms", "has_bachelor", "has_master", "has_doctorate"]:
-            if col in self._df.columns:
-                self._df.drop(columns=[col], inplace=True)
         # Standardize date_posted column to datetime
         self._df["date_posted"] = pd.to_datetime(self._df["date_posted"])
         # Parse locations into city and state
         city_state_loc = self._df["location"].map(parse_location)
         self._df["city"], self._df["state"], self._df["location"] = zip(*city_state_loc)
         # Add degree existence columns
-        for deg in DEG_MAP:
-            self._df[f"has_{deg}"] = self.exists("description", DEG_MAP[deg][0])
+        has_degrees = self._df["description"].map(parse_degrees)
+        self._df["has_ba"], self._df["has_ma"], self._df["has_phd"] = zip(*has_degrees)
 
     def collect(self,
                 site_name: str | list[str],
@@ -226,8 +213,8 @@ class JobsData:
         `"min_amount"`, `"max_amount"`, `"currency"`, `"interval"`
 
         Derived columns include:  
-        `"city"`, `"state"`, `"has_bachelor"`,
-        `"has_master"`, `"has_doctorate"`
+        `"city"`, `"state"`, `"has_ba"`,
+        `"has_ma"`, `"has_phd"`
         """
         n_init = len(self._df)
         for location in locations:
@@ -328,14 +315,13 @@ class JobsData:
         self._df = self._df[self.exists(column, expression)]
         return n_init - len(self._df)
 
-    def degree_score(self, preferred_degree: str) -> pd.Series:
+    def degree_score(self, degree_values: tuple[int, int, int]) -> pd.Series:
         """ Compute degree-based priority scores.
 
         Parameters
         ----------
-        preferred_degree : str
-            Preferred degree level to prioritize.  
-            Valid options: `"bachelor"`, `"master"`, or `"doctorate"`.
+        degree_scores : tuple[int, int, int]
+            Tuple of score adjustments for (bachelor, master, doctorate) degrees.
 
         Returns
         -------
@@ -343,16 +329,9 @@ class JobsData:
             Series of degree scores.
         """
         score = pd.Series(0, index=self._df.index)
-        if preferred_degree in DEG_MAP:
-            scores = DEG_MAP[preferred_degree][1]
-            score += scores[0] * self._df["has_bachelor"].astype(int)
-            score += scores[1] * self._df["has_master"].astype(int)
-            score += scores[2] * self._df["has_doctorate"].astype(int)
-        else:
-            JobsData._logger.warning(
-                f"Preferred degree '{preferred_degree}' not recognized. "
-                 "Valid options: 'bachelor', 'master', 'doctorate'. "
-                 "No degree-based priority adjustments applied.")
+        score += degree_values[0] * self._df["has_ba"].astype(int)
+        score += degree_values[1] * self._df["has_ma"].astype(int)
+        score += degree_values[2] * self._df["has_phd"].astype(int)
         return score
             
     def keyword_score(self, keyword_score_map: dict[int, list[str]]
@@ -417,7 +396,7 @@ class JobsData:
                    keyword_value_map: dict[int, list[str]],
                    state_rank_order: list[str],
                    site_rank_order: list[str],
-                   degree_preference: str):
+                   degree_values: tuple[int, int, int]):
         """ Opinionated helper method to apply a priority ordering among job postings.
 
         Parameters
@@ -428,12 +407,13 @@ class JobsData:
             priority to the job posting's running score.
         state_rank_order : list[str]
             List of states in descending priority order.
-        degree_preference : str
-            Preferred degree level to prioritize.  
-            Valid options: `"bachelor"`, `"master"`, or `"doctorate"`.
+        site_rank_order : list[str]
+            List of job sites in descending priority order.
+        degree_values : tuple[int, int, int]
+            Tuple of score adjustments for (bachelor, master, doctorate) degrees.
         """
         self._df["keyword_score"], self._df["keywords"] = self.keyword_score(keyword_value_map)
-        self._df["degree_score"] = self.degree_score(degree_preference)
+        self._df["degree_score"] = self.degree_score(degree_values)
         self._df["req_score"] = self._df["keyword_score"] + self._df["degree_score"]
         self._df["location_score"] = self.rank_order_score("state", state_rank_order)
         self._df["site_score"] = self.rank_order_score("site", site_rank_order)
@@ -519,8 +499,11 @@ class JobsData:
         """
         # Validate output path
         file = self._validate_path(path, "jobs_data.csv")
+        # Prepare DataFrame for saving
+        new_cols = ["city", "state", "has_ba", "has_ma", "has_phd"]
+        data = self._df.drop(columns=new_cols, errors='ignore')
         # Save DataFrame to CSV
-        self._df.to_csv(file, index=False)
+        data.to_csv(file, index=False)
         JobsData._logger.info(f"Saved {len(self._df)} jobs to {file}")            
                 
     def export_html(self,
@@ -529,9 +512,9 @@ class JobsData:
                    "state": "State",
                    "company": "Company",
                    "title": "Title",
-                   "has_bachelor": "BS",
-                   "has_master": "MS",
-                   "has_doctorate": "PhD",
+                   "has_ba": "BS",
+                   "has_ma": "MS",
+                   "has_phd": "PhD",
                    "job_url": "URL"},
                keys: dict[str, str] = {},
                path: str = "") -> str:

@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
             # Prioritize and deduplicate after collection
             jobs.prioritize(KEYWORD_VALUE_MAP, STATE_RANK_ORDER,
-                            ["LinkedIn", "Indeed"], "bachelor")
+                            ["LinkedIn", "Indeed"], (5, -3, -3))
             n_rem = jobs.deduplicate()
             logger.info(f"{group} > Removed {n_rem} duplicate job postings") 
             logger.info(f"{group} > Found {n_jobs - n_rem} unique job postings")
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         g_jobs.update(jobs)
         # Prioritize and deduplicate global data after update
         g_jobs.prioritize(KEYWORD_VALUE_MAP, STATE_RANK_ORDER,
-                          ["LinkedIn", "Indeed"], "bachelor")
+                          ["LinkedIn", "Indeed"], (5, -3, -3))
         n_rem = g_jobs.deduplicate()
         logger.info(f"Global > Removed {n_rem} duplicate job postings")
         # Write updated global data
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     if export:
         # Save results to html
         jobs["keyword_score"], jobs["keywords"] = jobs.keyword_score(KEYWORD_VALUE_MAP)
-        jobs["degree_score"] = jobs.degree_score("bachelor")
+        jobs["degree_score"] = jobs.degree_score((5, -3, -3))
         jobs["location_score"] = jobs.rank_order_score("state", STATE_RANK_ORDER)
         path = jobs.export_html(
             headers={"date_posted": "Date",
