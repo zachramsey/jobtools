@@ -6,9 +6,9 @@ import os
 import pandas as pd
 import re
 
-from jobtools import HTMLBuilder
-from jobtools.utils import JTLogger
-from jobtools.utils import parse_location, build_regex
+from . import HTMLBuilder
+from .utils import JTLogger
+from .utils import parse_location, build_regex
 
 
 # Degree regex patterns and corresponding score adjustments

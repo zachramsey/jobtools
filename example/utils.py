@@ -1,15 +1,14 @@
 import datetime as dt
 import os
-import pandas as pd
-import re
+
 from jobtools import JobsData
 from jobtools.cluster import TopicExtractor
-from jobtools.process import split_sections, get_label
 from jobtools.utils import JTLogger
-from filters import (JOB_TYPE_OMIT, JOB_LVL_OMIT,
-                     TITLE_REQ, TITLE_OMIT,
-                     DESC_REQ, DESC_OMIT)
-from priorities import KEYWORD_VALUE_MAP, STATE_RANK_ORDER
+from jobtools.utils import get_label, parse_description
+
+from filters import JOB_TYPE_OMIT, JOB_LVL_OMIT
+from filters import TITLE_REQ, TITLE_OMIT
+from filters import DESC_REQ, DESC_OMIT
 
 
 def filter_jobs(jobs: JobsData):
@@ -29,11 +28,14 @@ def filter_jobs(jobs: JobsData):
     logger.info(f"Removed {n_rem} with job type filter")
     n_rem = jobs.omit("job_level", JOB_LVL_OMIT)
     logger.info(f"Removed {n_rem} with job level filter")
-
     n_rem = len(jobs)
     jobs = jobs[~jobs["is_remote"]]
-    n_rem -= len(jobs)
-    logger.info(f"Removed {n_rem} with remote filter")
+    logger.info(f"Removed {n_rem - len(jobs)} with remote filter")
+
+    # Conditional degree requirement filter
+    n_rem = len(jobs)
+    jobs = jobs[~((jobs["has_master"] | jobs["has_doctorate"]) & ~jobs["has_bachelor"])]
+    logger.info(f"Removed {n_rem - len(jobs)} requiring advanced degree")
 
     # Title filters
     n_rem = jobs.omit("title", TITLE_OMIT)
@@ -46,17 +48,6 @@ def filter_jobs(jobs: JobsData):
     logger.info(f"Removed {n_rem} with description filter")
     n_rem = jobs.require("description", DESC_REQ)
     logger.info(f"Removed {n_rem} with description requirements")
-
-    # Conditional degree requirement filter
-    n_init = len(jobs)
-    jobs = jobs[~((jobs["has_master"] | jobs["has_doctorate"]) & ~jobs["has_bachelor"])]
-    logger.info(f"Removed {n_init - len(jobs)} requiring advanced degree")
-
-    # Final prioritization and deduplication
-    jobs.prioritize(KEYWORD_VALUE_MAP, STATE_RANK_ORDER,
-                    ["LinkedIn", "Indeed"], "bachelor")
-    n_rem = jobs.deduplicate()
-    logger.info(f"Removed {n_rem} duplicates")
 
     diff = n_init - len(jobs)
     dur = (dt.datetime.now() - start).total_seconds()
@@ -84,7 +75,7 @@ def cluster_jobs(jobs: JobsData):
     data = []
     for desc in jobs["description"]:
         if isinstance(desc, str) and len(desc) > 0:
-            sections = split_sections(desc)
+            sections = parse_description(desc)
             data.append("\n\n".join([content for (header, content) in sections
                                     if get_label(header) in relevant_sections]))
     dur = (dt.datetime.now() - start).total_seconds()

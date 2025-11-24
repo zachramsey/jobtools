@@ -1,7 +1,10 @@
+__all__ = ["HTMLBuilder"]
+
+
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype, is_string_dtype
 
-# Behold my assortment of unicode arrows:
+# Behold my assortment of unicode arrows!
 # ⧫ ▲ ▼ | 🮮 🮦 🮧 | 🡙 🡑 🡓 | ↕ ↑ ↓ | ⭥ ⭡ ⭣ | ⮁ ⮅ ⮇ | ◆ ⏶ ⏷ ⬘ ⬙ | ⇕ ⇑ ⇓ | ⇳ ⇧ ⇩ | ⥮ ⥣ ⥥ | ⬍ 🠭 🠯
 # 🠁 🠃 | 🠑 🠓 | 🠕 🠗 | 🠅 🠇 | 🠡 🠣 | 🠥 🠧 | 🠙 🠛 | 🠩 🠫 | 🠝 🠟 | 🠉 🠋 | 🠱 🠳 | 🡅 🡇 | 🡡 🡣 | 🡩 🡫 | 🡱 🡳 | 🡹 🡻 | 🢁 🢃
 

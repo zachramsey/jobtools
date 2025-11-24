@@ -1,6 +1,6 @@
 import datetime as dt
 from jobtools import JobsData
-from jobtools.process import clean_description
+from jobtools.utils import clean_description
 from jobtools.utils import JTLogger
 from proxy import PROXY
 from queries import SEARCH_STRINGS
@@ -20,7 +20,7 @@ states = ["Washington, United States", "Oregon, United States",
 
 locations = us
 results_wanted = 10000
-hours_old = 4#24 * 30
+hours_old = 2#24 * 30
 
 # Options:
 #                "" -> do not load previous data

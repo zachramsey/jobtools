@@ -1,8 +1,8 @@
 import pandas as pd
 from jobtools.jobsdata import deduplicate
-from jobtools.process import clean_description, generate_header_debug_str
+from jobtools.utils.description_parser import clean_description, generate_header_debug_str
 from jobtools.analysis import header_analysis
-from jobtools.utils import JTLogger
+from jobtools.utils.patterns import JTLogger
 
 
 def main():

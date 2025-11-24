@@ -1,4 +1,4 @@
-from jobtools.utils import AND, OR
+from jobtools.utils.patterns import AND, OR
 
 
 LANG = OR(["C++", "Python"])

@@ -1,9 +1,7 @@
-# from .analysis import header_analysis 
-
-from .html_builder import HTMLBuilder
+from .utils.html_builder import HTMLBuilder
 from .jobsdata import JobsData
 
-from . import process
+from .utils import description_parser
 from . import utils
 
 JOBSPY_COLS = [
@@ -20,6 +18,6 @@ JOBSPY_COLS = [
 __all__ = [
     "JobsData",
     "HTMLBuilder",
-    "process",
+    "description_parser",
     "utils",
 ]
