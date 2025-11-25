@@ -77,6 +77,11 @@ class JobsData:
         self._df.__setitem__(key, value)
 
     @property
+    def data(self) -> pd.DataFrame:
+        """ Get the underlying DataFrame of job postings. """
+        return self._df.copy()
+
+    @property
     def path(self) -> str:
         """ Get the output path for saving data. """
         if self._modified or not self._load_path:

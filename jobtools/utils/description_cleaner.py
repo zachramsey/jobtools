@@ -11,6 +11,8 @@ def clean_description(md: str) -> str:
     md = uni2ascii(md)
     md = md.encode("ascii", "ignore").decode("ascii", "ignore")
     
+    # Remove escape symbols
+    md = md.replace("\\", "")
     # Remove newlines within paragraphs
     md = re.sub(r"(?<=\S) *\n +(?=\S)", r" ", md)
     # Remove excess spaces
@@ -25,14 +27,14 @@ def clean_description(md: str) -> str:
     md = re.sub(r"\n{3,}", r"\n\n", md)
 
     # Remove space before punctuation
-    pat = r" ([,.!?:;])"
+    pat = r" *([,.!?:;])"
     md = re.sub(pat, r"\1", md)
     # Ensure space after comma unless between digits
     pat = r"(?<!\d)\, *(?!\d)"
     md = re.sub(pat, r", ", md)
-    # Ensure space after other punctuation
-    pat = r"(\S)([!?:;] *)(\S)"
-    md = re.sub(pat, r"\1\2 \3", md)
+    # # Ensure space after other punctuation
+    # pat = r"(\S)([!?;] *)(\S)"
+    # md = re.sub(pat, r"\1\2 \3", md)
 
     # Merge adjacent bold-italic markers
     pat = r"(?<=\S)___([ \t]*)___(?=\S)"
@@ -45,7 +47,7 @@ def clean_description(md: str) -> str:
     # md = re.sub(pat, r"\1", md)
 
     # Move trailing colons to outside of emphasis
-    pat = r" ?\: ?(_+)"
+    pat = r"\: *(_+)"
     md = re.sub(pat, r"\1:", md)
     # Remove Non-header lines with leading "#"
     pat = r"^\s*(#+)([^\s#].+?)\s*$"
@@ -55,19 +57,19 @@ def clean_description(md: str) -> str:
     md = re.sub(pat, r"\n### ", md)
 
     # Make header from [ __{h}__ {t} ]
-    pat = r"^(?!\s*\* )\s*_+(.+?)_+\s*(.+?)\s*$"
+    pat = r"^(?!\s*\* )\s*_+(.+?)_+(?!,)\:?\s+(.+?)\s*$"
     rep = r"\n### \1\n\n\2\n"
     md = re.sub(pat, rep, md, flags=re.MULTILINE)
     # Make header from [ __{h} : {t}__ ]
-    pat = r"^(?!\s*\* )\s*_+(.+?)\s*\:\s*(.+?)_+\s*$"
+    pat = r"^(?!\s*\* )\s*_+(.+?)\:\s+(.+?)_+\s*$"
     rep = r"\n### \1\n\n\2\n"
     md = re.sub(pat, rep, md, flags=re.MULTILINE)
     # Make header from [ {h} : {t} ]
-    pat = r"^(?!\s*\* )\s*(.{3,}?)\s*\:\s*(.+?)\s*$"
+    pat = r"^(?!\s*\* )\s*(.{3,}?)\:\s+(.+?)\s*$"
     rep = r"\n### \1\n\n\2\n"
     md = re.sub(pat, rep, md, flags=re.MULTILINE)
     # Make header from [ __{header}__ : ]
-    pat = r"^\s*_{2,}(.+?)_{2,}\s*\:?\s*$"
+    pat = r"^\s*_{2,}(.+?)_{2,}\:?\s*$"
     rep = r"\n### \1\n\n"
     md = re.sub(pat, rep, md, flags=re.MULTILINE)
     # Make header from [ {HEADER} ]
@@ -93,8 +95,9 @@ def clean_description(md: str) -> str:
     pat = r"^(?:### )([A-Z][A-Z\s]{3,})$"
     md = re.sub(pat, lambda m: "### " + m.group(1).title(), md, flags=re.MULTILINE)
 
-    # Remove escape symbols
-    md = md.replace("\\", "")
+    # Remove empty headers
+    pat = r"^###\s*$"
+    md = re.sub(pat, r"", md, flags=re.MULTILINE)
     # Remove lines with few characters
     pat = r"^\s*(.{1,5})\s*$"
     md = re.sub(pat, r"", md, flags=re.MULTILINE)

@@ -4,7 +4,9 @@ from jobtools.utils import clean_description
 from proxy import PROXY
 from queries import SEARCH_STRINGS
 from priorities import KEYWORD_VALUE_MAP, STATE_RANK_ORDER
-from utils import filter_jobs, cluster_jobs
+from filters import JOB_TYPE_OMIT, JOB_LVL_OMIT
+from filters import TITLE_REQ, TITLE_OMIT
+from filters import DESC_REQ, DESC_OMIT
 
 
 us = ["United States"]
@@ -19,7 +21,7 @@ states = ["Washington, United States", "Oregon, United States",
 
 locations = us
 results_wanted = 10000
-hours_old = 2#24 * 30
+hours_old = 24 * 1
 
 # Options:
 #                "" -> do not load previous data
@@ -34,7 +36,6 @@ update_global: bool = True
 scrape: bool = True
 filter: bool = True
 export: bool = True
-cluster: bool = False
 
 
 if __name__ == "__main__":
@@ -84,14 +85,43 @@ if __name__ == "__main__":
         g_jobs.export_csv()
 
     # Clean markdown descriptions
-    start = dt.datetime.now()
     jobs["description"] = jobs["description"].apply(clean_description)
-    dur = (dt.datetime.now() - start).total_seconds()
-    jobs.logger.info(f"Cleaned {len(jobs)} descriptions in {dur:.1f}s")
+    jobs.logger.info(f"Cleaned {len(jobs)} descriptions")
 
     if filter:
         # Filter job postings
-        jobs = filter_jobs(jobs)
+        start = dt.datetime.now()
+        n_init = len(jobs)
+
+        # Preliminary column filters
+        n_rem = jobs.omit("job_type", JOB_TYPE_OMIT)
+        jobs.logger.info(f"Removed {n_rem} with job type filter")
+        n_rem = jobs.omit("job_level", JOB_LVL_OMIT)
+        jobs.logger.info(f"Removed {n_rem} with job level filter")
+        n_rem = len(jobs)
+        jobs = jobs[~jobs["is_remote"]]
+        jobs.logger.info(f"Removed {n_rem - len(jobs)} with remote filter")
+
+        # Conditional degree requirement filter
+        n_rem = len(jobs)
+        jobs = jobs[~((jobs["has_master"] | jobs["has_doctorate"]) & ~jobs["has_bachelor"])]
+        jobs.logger.info(f"Removed {n_rem - len(jobs)} requiring advanced degree")
+
+        # Title filters
+        n_rem = jobs.omit("title", TITLE_OMIT)
+        jobs.logger.info(f"Removed {n_rem} with title filter")
+        n_rem = jobs.require("title", TITLE_REQ)
+        jobs.logger.info(f"Removed {n_rem} with title requirements")
+
+        # Description filters
+        n_rem = jobs.omit("description", DESC_OMIT)
+        jobs.logger.info(f"Removed {n_rem} with description filter")
+        n_rem = jobs.require("description", DESC_REQ)
+        jobs.logger.info(f"Removed {n_rem} with description requirements")
+
+        diff = n_init - len(jobs)
+        dur = (dt.datetime.now() - start).total_seconds()
+        jobs.logger.info(f"Removed {diff} jobs in {dur:.1f}s")
 
     if export:
         # Save results to html
@@ -116,6 +146,3 @@ if __name__ == "__main__":
                   "keywords": "keyword_score",
                   "job_url": "site"},
         )
-
-    if cluster:
-        cluster_jobs(jobs)

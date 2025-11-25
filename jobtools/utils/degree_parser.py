@@ -87,7 +87,7 @@ _phd_pat = re.compile(
 )
 
 
-def parse_degrees(self, text: str) -> tuple[bool, bool, bool]:
+def parse_degrees(text: str) -> tuple[bool, bool, bool]:
     """ Parse text for degree requirements.
 
     Parameters

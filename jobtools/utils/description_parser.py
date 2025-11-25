@@ -74,6 +74,17 @@ def generate_header_debug_str(md: str) -> str:
     return format_mapping(headers, labels)
 
 
+def generate_description_debug_str(md: str) -> str:
+    """ Generate formatted description sections for debugging. """
+    output = ""
+    for line in md.splitlines():
+        if "###" in line:
+            output += f"{get_label(line):>16} | {line}\n"
+        else:
+            output += f"{'':>16} | {line}\n"
+    return output
+
+
 def parse_description(md: str) -> list[tuple[str, str]]:
     """ Parse cleaned markdown description into sections.
 
