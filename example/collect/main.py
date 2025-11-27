@@ -21,7 +21,7 @@ states = ["Washington, United States", "Oregon, United States",
 
 locations = us
 results_wanted = 10000
-hours_old = 24 * 1
+hours_old = 32
 
 # Options:
 #                "" -> do not load previous data
@@ -30,10 +30,10 @@ hours_old = 24 * 1
 # "output/{subdir}" -> load specified subdirectory
 load_data: str = "recent"
 
-save_raw: bool = True
-update_global: bool = True
+save_raw: bool = False
+update_global: bool = False
 
-scrape: bool = True
+scrape: bool = False
 filter: bool = True
 export: bool = True
 
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
         # Conditional degree requirement filter
         n_rem = len(jobs)
-        jobs = jobs[~((jobs["has_master"] | jobs["has_doctorate"]) & ~jobs["has_bachelor"])]
+        jobs = jobs[~((jobs["has_ma"] | jobs["has_phd"]) & ~jobs["has_ba"])]
         jobs.logger.info(f"Removed {n_rem - len(jobs)} requiring advanced degree")
 
         # Title filters
@@ -133,16 +133,16 @@ if __name__ == "__main__":
                      "state": "State",
                      "company": "Company",
                      "title": "Title",
-                     "has_bachelor": "BS",
-                     "has_master": "MS",
-                     "has_doctorate": "PhD",
+                     "has_ba": "BS",
+                     "has_ma": "MS",
+                     "has_phd": "PhD",
                      "keywords": "Keywords",
                      "job_url": "URL"},
             keys={"date_posted": "date_posted",
                   "state": "location_score",
                   "company": "company",
                   "title": "title",
-                  "has_bachelor": "degree_score",
+                  "has_ba": "degree_score",
                   "keywords": "keyword_score",
                   "job_url": "site"},
         )

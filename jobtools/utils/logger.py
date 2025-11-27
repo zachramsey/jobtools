@@ -9,12 +9,13 @@ class JTLogger:
     )
 
     def __init__(self):
+        """ Get the JobTools logger instance. """
         self.logger = logging.getLogger("JobTools")
 
     def configure(self, level):
         """ Configure the JTLogger instance. """
         self.set_level(level)
-        self._add_handler()
+        self.addHandler(logging.StreamHandler())
         self.logger.propagate = False
 
     def debug(self, message):
@@ -35,14 +36,20 @@ class JTLogger:
         if level in levels:
             self.logger.setLevel(level)
 
-    def _add_handler(self):
-        sh = logging.StreamHandler()
-        sh.setFormatter(self._formatter)
-        self.logger.addHandler(sh)
+    def addHandler(self, handler: logging.Handler):
+        """ Add the specified handler to the
+        JobTools logger and set its formatter. """
+        handler.setFormatter(self._formatter)
+        self.logger.addHandler(handler)
 
-        # Remove duplicate handlers
-        if len(self.logger.handlers) > 1:
-            self.logger.handlers = [self.logger.handlers[0]]
+    # def _add_sh_handler(self):
+    #     sh = logging.StreamHandler()
+    #     sh.setFormatter(self._formatter)
+    #     self.logger.addHandler(sh)
+
+    #     # Remove duplicate handlers
+    #     if len(self.logger.handlers) > 1:
+    #         self.logger.handlers = [self.logger.handlers[0]]
 
     @staticmethod
     def conform_format(logger_name: str):

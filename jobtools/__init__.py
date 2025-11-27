@@ -1,5 +1,6 @@
 from .utils.html_builder import HTMLBuilder
 from .jobsdata import JobsData
+from .app.app import JobToolsApp
 
 from .utils import description_parser
 from . import utils
@@ -16,8 +17,9 @@ JOBSPY_COLS = [
 ]
 
 __all__ = [
-    "JobsData",
     "HTMLBuilder",
+    "JobsData",
+    "JobToolsApp",
     "description_parser",
     "utils",
 ]

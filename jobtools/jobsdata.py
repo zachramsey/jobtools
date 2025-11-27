@@ -63,7 +63,7 @@ class JobsData:
     
     def __getitem__(self, key):
         """ Get item(s) from the underlying DataFrame. """
-        result = self._df.__getitem__(key)
+        result = self._df[key]
         if isinstance(result, pd.DataFrame):
             jobs = JobsData(data=result)
             jobs._new_path = self._new_path
@@ -74,7 +74,7 @@ class JobsData:
 
     def __setitem__(self, key, value):
         """ Set item(s) in the underlying DataFrame. """
-        self._df.__setitem__(key, value)
+        self._df[key] = value
 
     @property
     def data(self) -> pd.DataFrame:
