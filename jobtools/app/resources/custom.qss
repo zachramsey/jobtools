@@ -1,0 +1,30 @@
+.sidebar {{
+    border-top: none;
+    border-bottom: none;
+    border-left: none;
+    border-radius: 0px;
+}}
+
+QPushButton.nav-button {{
+    border: none;
+    padding: 10px;
+    background-color: transparent;
+    color: {QTMATERIAL_PRIMARYTEXTCOLOR};
+}}
+QPushButton.nav-button:hover {{
+    background-color: {QTMATERIAL_SECONDARYLIGHTCOLOR};
+}}
+QPushButton.nav-button:checked {{
+    background-color: {QTMATERIAL_SECONDARYCOLOR};
+
+}}
+
+QPushButton.chip {{
+    border-radius: 19px;
+}}
+
+QPushButton.help-button {{
+    border: none;
+    background-color: transparent;
+    padding: 0px;
+}}

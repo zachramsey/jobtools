@@ -1,9 +1,44 @@
+from enum import Enum
 from PySide6.QtWidgets import (
-    QApplication, QSizePolicy, QWidget,
-    QVBoxLayout, QHBoxLayout, 
-    QPlainTextEdit, QPushButton
+    QApplication, QWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, 
+    QPlainTextEdit, QPushButton, QLayout, QFrame, QLineEdit,
+    QStackedLayout, QMenu, QCheckBox, QLabel
 )
-from PySide6.QtCore import Qt, QEvent, Slot
+from PySide6.QtCore import Qt, QEvent, Slot, QPoint, QRect, QSize, Signal
+# from PySide6.QtGui
+from .utils import get_icon
+
+
+class QHeader(QWidget):
+    """ Header widget with title and optional help tooltip. """
+
+    def __init__(self, title: str, header_level: int = 2, tooltip: str = ""):
+        """ Initialize the header widget.
+
+        Parameters
+        ----------
+        title : str
+            The header title text.
+        header_level : int, optional
+            The header level (e.g., 1 for h1, 2 for h2).
+        tooltip : str, optional
+            Optional tooltip text for help icon.
+        """
+        super().__init__()
+        self.setLayout(QHBoxLayout(self))
+        self.layout().addWidget(QLabel(f"<h{header_level}>{title}</h{header_level}>"))  # type: ignore
+        if tooltip:
+            help = QPushButton()
+            help.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
+            help.setIcon(get_icon("help", color="primaryLightColor"))
+            help.setIconSize(QSize(16, 16))
+            help.setCursor(Qt.CursorShape.PointingHandCursor)
+            help.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            help.setProperty("class", "help-button")
+            help.setToolTip(tooltip)
+            self.layout().addWidget(help)   # type: ignore
+        self.layout().addStretch()          # type: ignore
+
 
 
 class QAdaptivePlainTextEdit(QPlainTextEdit):
@@ -19,7 +54,7 @@ class QAdaptivePlainTextEdit(QPlainTextEdit):
         """
         super().__init__()
         self._font_height = self.fontMetrics().lineSpacing()
-        self._vert_margins = self.contentsMargins().top() + self.contentsMargins().bottom() + 8
+        self._vert_margins = self.contentsMargins().top() + self.contentsMargins().bottom() + 17
         self._min_height = self._font_height + self._vert_margins
         self._max_height = (self._font_height * max_lines) + self._vert_margins
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -66,7 +101,6 @@ class QPlainTextListEdit(QWidget):
         editor.setPlainText(self._placeholder_text)
         editor.setReadOnly(True)
         editor.installEventFilter(self)
-        editor.setStyleSheet("color: #888;")
         row_layout.addWidget(editor)
         # Create button container
         btn_container = QWidget()
@@ -77,6 +111,7 @@ class QPlainTextListEdit(QWidget):
         delete_btn = QPushButton("Delete")
         delete_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         delete_btn.setVisible(False)
+        delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_layout.addWidget(delete_btn)
         # Add row to main layout
         self.layout().addWidget(row_widget)
@@ -90,8 +125,11 @@ class QPlainTextListEdit(QWidget):
         delete_btn.clicked.connect(lambda _, r=row: self._on_delete(r))
 
     def eventFilter(self, watched, event):
-        """ Event filter to handle FocusIn events on editors. """
-        # Activate editor on focus in
+        """ Event filter to handle FocusIn events on editors.
+
+        Only activate editors when focus change is due to an actual user interaction
+        (mouse, tab, backtab, or keyboard shortcut), not programmatic focus changes.
+        """
         if isinstance(watched, QPlainTextEdit) and event.type() == QEvent.Type.FocusIn:
             # Find corresponding row
             row = None
@@ -105,7 +143,6 @@ class QPlainTextListEdit(QWidget):
                 row["editor"].setReadOnly(False)
                 if row["editor"].toPlainText() == self._placeholder_text:
                     row["editor"].setPlainText("")
-                row["editor"].setStyleSheet("color: #222;")
                 row["delete_btn"].setVisible(True)
                 # Add delete button to activated editor
                 self._restore_delete_button(row)
@@ -123,10 +160,12 @@ class QPlainTextListEdit(QWidget):
         self._clear_layout(row["btn_layout"])
         confirm_btn = QPushButton("Confirm")
         confirm_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        confirm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         confirm_btn.clicked.connect(lambda _, r=row: self._on_confirm_delete(r))
         row["btn_layout"].addWidget(confirm_btn)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.clicked.connect(lambda _, r=row: self._on_cancel_delete(r))
         row["btn_layout"].addWidget(cancel_btn)
 
@@ -183,18 +222,483 @@ class QPlainTextListEdit(QWidget):
     @staticmethod
     def _clear_layout(layout):
         """ Clear all widgets from a layout. """
-        # remove all widgets from a layout
         while layout.count():
             item = layout.takeAt(0)
             w = item.widget()
             if w is not None:
                 w.setParent(None)
-
+                
     def get_items(self) -> list[str]:
-        """ Access current list of non-empty items. """
+        """ Get the list of items from all non-empty editors. """
         items = []
         for row in self.rows:
             text = row["editor"].toPlainText().strip()
             if text and text != self._placeholder_text:
                 items.append(text)
         return items
+    
+    def set_items(self, items: list[str]):
+        """ Set the list of items, replacing existing editors.
+
+        Parameters
+        ----------
+        items : list[str]
+            List of strings to set as editor contents.
+        """
+        # Clear existing rows
+        for row in self.rows:
+            try:
+                self.layout().removeWidget(row["container"])    # type: ignore
+            except Exception:
+                pass
+            row["container"].hide()
+            row["container"].setParent(None)
+            row["container"].deleteLater()
+        self.rows.clear()
+        # Add new rows
+        for text in items:
+            self._add_editor_row()
+            row = self.rows[-1]
+            row["editor"].setPlainText(text)
+            row["editor"].setReadOnly(False)
+            row["delete_btn"].setVisible(True)
+            self._restore_delete_button(row)
+        # Ensure trailing inactive editor
+        if not self.rows or not self.rows[-1]["editor"].isReadOnly():
+            self._add_editor_row()
+    
+
+class QFlowLayout(QLayout):
+    def __init__(self, parent=None, margin=0, h_spacing=10, v_spacing=10):
+        super().__init__(parent)
+        self.setContentsMargins(margin, margin, margin, margin)
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self._item_list = []
+
+    def addItem(self, item):
+        self._item_list.append(item)
+
+    def count(self):
+        return len(self._item_list)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._item_list):
+            return self._item_list[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._item_list):
+            return self._item_list.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._item_list:
+            size = size.expandedTo(item.minimumSize())
+        margin = self.contentsMargins().top()
+        size += QSize(2 * margin, 2 * margin)
+        return size
+
+    def _do_layout(self, rect, test_only):
+        x = rect.x()
+        y = rect.y()
+        line_height = 0
+        spacing = self._h_spacing
+
+        for item in self._item_list:
+            wid = item.widget()
+            space_x = spacing + wid.style().layoutSpacing(
+                QSizePolicy.ControlType.PushButton,
+                QSizePolicy.ControlType.PushButton,
+                Qt.Orientation.Horizontal)
+            
+            next_x = x + item.sizeHint().width() + space_x
+            if next_x - space_x > rect.right() and line_height > 0:
+                x = rect.x()
+                y = y + line_height + self._v_spacing
+                next_x = x + item.sizeHint().width() + space_x
+                line_height = 0
+
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+
+            x = next_x
+            line_height = max(line_height, item.sizeHint().height())
+
+        return y + line_height - rect.y()
+
+
+class ChipMode(Enum):
+    STANDARD = 0 
+    CREATOR = 1
+
+
+class QChip(QWidget):
+    """ A selectable and optionally modifiable chip widget. """
+
+    clicked = Signal()
+    """ Signal emitted when the chip is clicked. """
+    delete_requested = Signal(QWidget)
+    """ Signal emitted when the user requests deletion of the chip. """
+    new_text_entered = Signal(str)
+    """ Signal emitted when the user enters new text in creator mode. """
+
+    def __init__(self,
+                 text: str|None = None,
+                 mode: ChipMode = ChipMode.STANDARD,
+                 is_selected: bool = False,
+                 is_custom: bool = False):
+        """ Initialize the custom chip.
+
+        Parameters
+        ----------
+        text : str
+            Initial text for the chip.
+        is_selected : bool
+            Whether the chip is in selected state.
+        is_custom : bool
+            Whether the chip can be edited/deleted by the user.
+        """
+        super().__init__()
+        self.mode = mode
+        self.is_selected = is_selected
+        self._is_custom = is_custom
+
+        # Stacked Layout: idx=0->Button, idx=1->LineEdit
+        self.stack = QStackedLayout(self)
+        self.stack.setContentsMargins(0, 0, 0, 0)
+
+        # Button view
+        self.btn = QPushButton()
+        if text is not None:
+            self.btn.setText(text)
+        else:
+            self.btn.setIcon(get_icon("add"))
+            self.btn.setIconSize(QSize(16, 16))
+        self.btn.setProperty("class", "chip")
+        self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # Keep the button width tight to its contents:
+        self.btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        # Keep visual selection state consistent with provided value
+        if self.mode == ChipMode.STANDARD:
+            self.btn.setCheckable(True)
+            self.btn.clicked.connect(self.clicked.emit)
+            self.btn.setChecked(self.is_selected)
+            self.set_is_custom(is_custom)
+        else:
+            self.btn.clicked.connect(self.start_editing)
+        self.stack.addWidget(self.btn)
+
+        # Editor view
+        self.editor = QLineEdit()
+        self.editor.setPlaceholderText("Enter chip text...")
+        self.editor.returnPressed.connect(self.commit_edit)
+        self.editor.installEventFilter(self)    # Handle Esc / FocusOut
+        self.stack.addWidget(self.editor)
+
+    @property
+    def text(self) -> str:
+        """ Text of the chip. """
+        return self.btn.text()
+    
+    @text.setter
+    def text(self, text: str):
+        self.btn.setText(text)
+
+    @property
+    def is_custom(self) -> bool:
+        """ Whether the chip is user-editable/deletable. """
+        return self._is_custom
+
+    def set_is_custom(self, value: bool):
+        self._is_custom = value
+        if self.is_custom:
+            self.btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            self.btn.customContextMenuRequested.connect(self.show_context_menu)
+            self.btn.setToolTip("Right-click to Edit/Delete")
+        else:
+            self.btn.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+            self.btn.setToolTip("")
+
+    def show_context_menu(self, pos: QPoint):
+        if not self.is_custom:
+            return
+
+        menu = QMenu(self)
+        edit = menu.addAction("Edit")
+        menu.addSeparator()
+        delete = menu.addAction("Delete")
+
+        action = menu.exec(self.btn.mapToGlobal(pos))
+        if action == edit:
+            self.start_editing()
+        elif action == delete:
+            self.delete_requested.emit(self)
+
+    def start_editing(self):
+        if self.mode == ChipMode.STANDARD:
+            self.editor.setText(self.btn.text())
+        else:
+            self.editor.clear()
+        self.stack.setCurrentIndex(1)
+        self.editor.setFocus()
+
+    def commit_edit(self):
+        text = self.editor.text().strip()
+        if self.mode == ChipMode.CREATOR:
+            if text:
+                self.new_text_entered.emit(text)
+            self.editor.clear()
+        else:
+            if text:
+                self.btn.setText(text)
+        self.stack.setCurrentIndex(0)
+
+    def cancel_edit(self):
+        self.editor.clear()
+        self.stack.setCurrentIndex(0)
+
+    def eventFilter(self, obj, event):
+        if obj == self.editor:
+            if event.type() == QEvent.Type.FocusOut:
+                if self.mode == ChipMode.CREATOR:
+                    self.cancel_edit()
+                else:
+                    self.commit_edit()
+                return True
+            if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+                self.cancel_edit()
+                return True
+        return super().eventFilter(obj, event)        
+
+    def sizeHint(self) -> QSize:
+        """Return a size hint based on the current visible widget (button/editor).
+        This ensures the chip width follows the content width."""
+        current_widget = self.stack.currentWidget()
+        if current_widget is None:
+            current_widget = self.btn
+        sh = current_widget.sizeHint()
+        margins = self.contentsMargins()
+        return QSize(sh.width() + margins.left() + margins.right(),
+                     sh.height() + margins.top() + margins.bottom())
+
+
+class QChipSelect(QWidget):
+    """ Widget for selecting options using chips. """
+
+    def __init__(self,
+                 base_items: list[str]=[],
+                 enable_creator: bool = True):
+        """ Initialize the chip selection widget.
+
+        Parameters
+        ----------
+        base_items : list[str], optional
+            List of initially available options.
+        enable_creator : bool, optional
+            Whether to allow user-defined items.
+        """
+        super().__init__()
+        self.base_items = base_items
+        self.creator_chip: QChip|None = None
+        self.setLayout(QVBoxLayout(self))
+        # Container for selected chips
+        self.selected_container = QWidget()
+        self.selected_layout = QFlowLayout(self.selected_container)
+        self.layout().addWidget(self.selected_container)        # type: ignore
+        # Divider
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        self.layout().addWidget(line)                           # type: ignore
+        # Container for available chips
+        self.available_container = QWidget()
+        self.available_layout = QFlowLayout(self.available_container)
+        self.layout().addWidget(self.available_container)       # type: ignore
+        # Initialization
+        if base_items:
+            for text in base_items:
+                self.add_standard_chip(text, self.available_layout)  
+        if enable_creator:
+            self.add_creator_chip()
+
+    def add_standard_chip(self, text: str,
+                          target_layout: QFlowLayout,
+                          selected: bool = False,
+                          is_custom: bool = False):
+        # Add a standard chip to the specified layout.
+        chip = QChip(text, mode=ChipMode.STANDARD,
+                     is_selected=selected, is_custom=is_custom)
+        chip.clicked.connect(lambda: self._on_move_chip(chip))
+        chip.delete_requested.connect(self._on_delete_chip)
+        target_layout.addWidget(chip)
+        # Keep the button's checked state consistent with `selected`
+        if chip.mode == ChipMode.STANDARD:
+            chip.btn.setChecked(selected)
+
+    def add_creator_chip(self):
+        if self.creator_chip is None:
+            self.creator_chip = QChip(mode=ChipMode.CREATOR)
+            self.creator_chip.new_text_entered.connect(self._on_create_chip)
+        self.available_layout.addWidget(self.creator_chip)
+
+    @Slot()
+    def _on_create_chip(self, text: str):
+        self.add_standard_chip(text, self.selected_layout,
+                               selected=True, is_custom=True)
+        
+    @Slot()
+    def _on_move_chip(self, chip: QChip):
+        current_layout = chip.parentWidget().layout()   # type: ignore
+        if current_layout == self.available_layout:
+            # Is available -> move to selected
+            self.available_layout.removeWidget(chip)
+            chip.is_selected = True
+            self.selected_layout.addWidget(chip)
+        else:
+            # Is selected -> move to available
+            self.selected_layout.removeWidget(chip)
+            chip.is_selected = False
+            if self.creator_chip:
+                # Ensure creator chip stays at end
+                self.available_layout.removeWidget(self.creator_chip)
+                self.available_layout.addWidget(chip)
+                self.available_layout.addWidget(self.creator_chip)
+            else:
+                self.available_layout.addWidget(chip)
+
+    @Slot()
+    def _on_delete_chip(self, chip: QChip):
+        layout = chip.parentWidget().layout()   # type: ignore
+        layout.removeWidget(chip)               # type: ignore
+        chip.deleteLater()
+
+    def __get_items(self, layout: QFlowLayout) -> list[str]:
+        items = []
+        for i in range(layout.count()):
+            chip: QChip = layout.itemAt(i).widget()
+            if chip is not self.creator_chip:
+                items.append(chip.btn.text())
+        return items
+
+    def get_selected(self) -> list[str]:
+        """ List of selected items' text. """
+        return self.__get_items(self.selected_layout)
+    
+    def get_available(self) -> list[str]:
+        """ List of available items' text. """
+        return self.__get_items(self.available_layout)
+    
+    def __set_items(self,
+                    set_layout: QFlowLayout,
+                    other_layout: QFlowLayout,
+                    items: list[str]):
+        for i, text in enumerate(items):
+            if text in self.__get_items(other_layout):
+                # Find and remove from other layout
+                for j in range(other_layout.count()):
+                    chip: QChip = other_layout.itemAt(j).widget()
+                    if chip.btn.text() == text:
+                        other_layout.removeWidget(chip)
+            is_custom = text not in self.base_items
+            if i < set_layout.count():
+                # Bootstrap existing chip at this index
+                chip = set_layout.itemAt(i).widget()
+                chip.btn.setText(text)
+                chip.set_is_custom(is_custom)
+            else:
+                # Otherwise, create a new chip and add it
+                self.add_standard_chip(text, set_layout,
+                                       selected=(set_layout == self.selected_layout),
+                                       is_custom=is_custom)
+    
+    def set_selected(self, items: list[str]):
+        """ Overwrite selected items with the given list,
+        removing items from available as needed.
+
+        Parameters
+        ----------
+        items : list[str]
+            List of items to set as selected.
+        """
+        self.__set_items(self.selected_layout, self.available_layout, items)
+    
+    def set_available(self, items: list[str]):
+        """ Overwrite available items with the given list,
+        removing items from selected as needed.
+
+        Parameters
+        ----------
+        items :  list[str]
+            List of items to set as available.
+        """
+        if self.creator_chip:
+            # Temporarily removes creator chip to avoid interference
+            self.available_layout.removeWidget(self.creator_chip)
+            self.__set_items(self.available_layout, self.selected_layout, items)
+            self.available_layout.addWidget(self.creator_chip)
+        else:
+            self.__set_items(self.available_layout, self.selected_layout, items)
+
+
+class QCheckBoxSelect(QWidget):
+    """ A simple checkbox selection widget. """
+
+    def __init__(self, labels: list[str] = []):
+        """ Initialize the checkbox selection widget.
+
+        Parameters
+        ----------
+        labels : list[str], optional
+            List of checkbox labels.
+        """
+        super().__init__()
+        self.setLayout(QHBoxLayout(self))
+        # Create checkbox for each label
+        self.checkboxes: dict[str, QCheckBox] = {}
+        for label in labels:
+            cb = QCheckBox(label)
+            cb.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.layout().addWidget(cb)     # type: ignore
+            self.checkboxes[label] = cb
+        # Set checkbox widths to the maximum content width
+        max_width = 0
+        for cb in self.checkboxes.values():
+            max_width = max(max_width, cb.sizeHint().width())
+        for cb in self.checkboxes.values():
+            cb.setFixedWidth(max_width + 5)
+        # Push content to the left
+        self.layout().addStretch()          # type: ignore
+
+    def get_selected(self) -> list[str]:
+        """ The list of selected checkbox labels. """
+        return [label for label, cb in self.checkboxes.items() if cb.isChecked()]
+    
+    def set_selected(self, labels: list[str]):
+        """ Set selected checkboxes by label.
+
+        Parameters
+        ----------
+        labels : list[str]
+            List of labels to set as selected.
+        """
+        for label, cb in self.checkboxes.items():
+            cb.setChecked(label in labels)
