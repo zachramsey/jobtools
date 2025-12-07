@@ -1,8 +1,8 @@
 from enum import Enum
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, 
-    QPlainTextEdit, QPushButton, QLayout, QFrame, QLineEdit,
-    QStackedLayout, QMenu, QCheckBox, QLabel
+    QWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
+    QPushButton, QLayout, QFrame, QLineEdit, QStackedLayout, QMenu,
+    QCheckBox, QLabel
 )
 from PySide6.QtCore import Qt, QEvent, Slot, QPoint, QRect, QSize, Signal
 # from PySide6.QtGui
@@ -74,6 +74,11 @@ class QAdaptivePlainTextEdit(QPlainTextEdit):
     
 
 class QPlainTextListEdit(QWidget):
+    """ Widget for editing a list of plain text items. """
+
+    itemsChanged = Signal(list)
+    """ Signal emitted when the list of items changes. """
+
     def __init__(self, placeholder_text: str = "Add new item..."):
         """ Initialize the plain text list editor.
 
@@ -85,8 +90,14 @@ class QPlainTextListEdit(QWidget):
         super().__init__()
         self._placeholder_text = placeholder_text
         self.setLayout(QVBoxLayout(self))
-        # Track editor rows
         self.rows: list[dict] = []
+        """ List of editor row dictionaries. Each dictionary contains:
+            - container: QWidget
+            - editor: QPlainTextEdit
+            - btn_container: QWidget
+            - btn_layout: QHBoxLayout
+            - delete_btn: QPushButton
+        """
         # start with a single inactive editor
         self._add_editor_row()
 
@@ -130,25 +141,26 @@ class QPlainTextListEdit(QWidget):
         Only activate editors when focus change is due to an actual user interaction
         (mouse, tab, backtab, or keyboard shortcut), not programmatic focus changes.
         """
+        # Handle FocusIn (Activation)
         if isinstance(watched, QPlainTextEdit) and event.type() == QEvent.Type.FocusIn:
-            # Find corresponding row
-            row = None
-            for r in self.rows:
-                if r["editor"] is watched:
-                    row = r
-                    break
-            # Activate editor if it is inactive
+            # Get the corresponding row
+            row = next((r for r in self.rows if r["editor"] is watched), None)
             if row is not None and row["editor"].isReadOnly():
-                # Activate editor
+                # Inactive row exists -> Activate it
                 row["editor"].setReadOnly(False)
                 if row["editor"].toPlainText() == self._placeholder_text:
+                    # Clear placeholder text
                     row["editor"].setPlainText("")
+                # Show delete button
                 row["delete_btn"].setVisible(True)
-                # Add delete button to activated editor
                 self._restore_delete_button(row)
-                # Ensure there is always a trailing inactive editor
                 if self.rows and self.rows[-1]["editor"] is watched:
+                    # Last row activated -> Add new inactive row
                     self._add_editor_row()
+        # Handle FocusOut (Editing Finished) -> Emit Signal
+        if isinstance(watched, QPlainTextEdit) and event.type() == QEvent.Type.FocusOut:
+            # Emit changes when user leaves a field
+            self.itemsChanged.emit(self.get_items())
         return super().eventFilter(watched, event)
 
     @Slot()
@@ -174,34 +186,26 @@ class QPlainTextListEdit(QWidget):
         """ Handle confirm delete button click for a row. """
         if row not in self.rows:
             return
-        # Clear focus if editor is focused
         try:
-            app = QApplication.instance()
-            if app is not None and app.focusWidget() is row["editor"]:
-                try:
-                    self.setFocus()
-                except Exception:
-                    pass
-                row["editor"].clearFocus()
-        except Exception:
-            pass
-        # Remove row from layout and schedule deletion
-        try:
+            # Clear focus from editor if needed
+            row["editor"].clearFocus()
+            # Remove row from layout and schedule deletion
             self.layout().removeWidget(row["container"])
         except Exception:
             pass
         row["container"].hide()
         row["container"].setParent(None)
         row["container"].deleteLater()
-        # Remove row from list
         try:
+            # Remove row from list
             self.rows.remove(row)
         except ValueError:
             pass
-        # Ensure at least one inactive editor remains
         if not self.rows:
+            # No rows left -> add a new inactive row
             self._add_editor_row()
         else:
+            # Ensure trailing inactive editor
             last_editor = self.rows[-1]["editor"]
             if not last_editor.isReadOnly():
                 self._add_editor_row()
@@ -263,8 +267,8 @@ class QPlainTextListEdit(QWidget):
             row["editor"].setReadOnly(False)
             row["delete_btn"].setVisible(True)
             self._restore_delete_button(row)
-        # Ensure trailing inactive editor
         if not self.rows or not self.rows[-1]["editor"].isReadOnly():
+            # Ensure trailing inactive editor
             self._add_editor_row()
     
 
@@ -504,6 +508,9 @@ class QChip(QWidget):
 class QChipSelect(QWidget):
     """ Widget for selecting options using chips. """
 
+    selectionChanged = Signal(list)
+    """ Signal emitted when the selection changes. """
+
     def __init__(self,
                  base_items: list[str]=[],
                  enable_creator: bool = True):
@@ -562,8 +569,11 @@ class QChipSelect(QWidget):
 
     @Slot()
     def _on_create_chip(self, text: str):
+        # Add new standard chip to selected layout
         self.add_standard_chip(text, self.selected_layout,
                                selected=True, is_custom=True)
+        # Emit selection changed signal
+        self.selectionChanged.emit(self.get_selected())
         
     @Slot()
     def _on_move_chip(self, chip: QChip):
@@ -584,12 +594,18 @@ class QChipSelect(QWidget):
                 self.available_layout.addWidget(self.creator_chip)
             else:
                 self.available_layout.addWidget(chip)
+        # Emit selection changed signal
+        self.selectionChanged.emit(self.get_selected())
 
     @Slot()
     def _on_delete_chip(self, chip: QChip):
+        is_selected = chip.is_selected
         layout = chip.parentWidget().layout()   # type: ignore
         layout.removeWidget(chip)               # type: ignore
         chip.deleteLater()
+        # Emit selection changed signal if it was selected
+        if is_selected:
+            self.selectionChanged.emit(self.get_selected())
 
     def __get_items(self, layout: QFlowLayout) -> list[str]:
         items = []
