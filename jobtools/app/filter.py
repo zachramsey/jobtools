@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import QModelIndex, Qt, Slot
-from jobspy.model import JobType      # type: ignore
+from jobspy.model import JobType    # type: ignore
 from .custom_widgets import QHeader, QChipSelect, QCheckBoxSelect
 from .model import ConfigModel
 
@@ -39,55 +39,59 @@ class FilterPage(QWidget):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
         self._model = model
-        self._idcs: dict[str, QModelIndex] = {}                         # type: ignore
-        defaults: dict = {}
+        self._idcs: dict[str, QModelIndex] = {}
+        self.defaults: dict = {}
 
         # Wok model selector
-        self.layout().addWidget(QHeader("Work Model", tooltip=WM_TT))   # type: ignore
+        self.layout().addWidget(QHeader("Work Model", tooltip=WM_TT))
         self.wm_selector = QCheckBoxSelect(["Remote", "Onsite"])
-        self.layout().addWidget(self.wm_selector)                       # type: ignore
-        defaults["work_models"] = []
+        self.layout().addWidget(self.wm_selector)
+        self.defaults["work_models"] = []
 
         # Job type selector
-        self.layout().addWidget(QHeader("Job Types", tooltip=JT_TT))    # type: ignore
+        self.layout().addWidget(QHeader("Job Types", tooltip=JT_TT))
         self.jt_selector = QCheckBoxSelect([jt.name.replace("_", " ").title()
                                             for jt in JobType])
-        self.layout().addWidget(self.jt_selector)                       # type: ignore
-        defaults["job_types"] = []
+        self.layout().addWidget(self.jt_selector)
+        self.defaults["job_types"] = []
 
         # Title exclude editor
-        self.layout().addWidget(                                        # type: ignore
+        self.layout().addWidget(
             QHeader("Title Term Exclusions", tooltip=TE_TT))    
         self.te_editor = QChipSelect()
-        self.layout().addWidget(self.te_editor)                         # type: ignore
-        defaults["title_exclude"] = ([], [])
+        self.layout().addWidget(self.te_editor)
+        self.defaults["title_exclude_selected"] = []
+        self.defaults["title_exclude_available"] = []
 
         # Title require editor
-        self.layout().addWidget(                                        # type: ignore
+        self.layout().addWidget(
             QHeader("Title Term Requirements", tooltip=TR_TT))
         self.tr_editor = QChipSelect()
-        self.layout().addWidget(self.tr_editor)                         # type: ignore
-        defaults["title_require"] = ([], [])
+        self.layout().addWidget(self.tr_editor)
+        self.defaults["title_require_selected"] = []
+        self.defaults["title_require_available"] = []
 
         # Description exclude editor
-        self.layout().addWidget(                                        # type: ignore
+        self.layout().addWidget(
             QHeader("Description Term Exclusions", tooltip=DE_TT))
         self.de_editor = QChipSelect()
-        self.layout().addWidget(self.de_editor)                         # type: ignore
-        defaults["descr_exclude"] = ([], [])
+        self.layout().addWidget(self.de_editor)
+        self.defaults["descr_exclude_selected"] = []
+        self.defaults["descr_exclude_available"] = []
 
         # Description require editor
-        self.layout().addWidget(                                        # type: ignore
+        self.layout().addWidget(
             QHeader("Description Term Requirements", tooltip=DR_TT))
         self.dr_editor = QChipSelect()
-        self.layout().addWidget(self.dr_editor)                         # type: ignore
-        defaults["descr_require"] = ([], [])
+        self.layout().addWidget(self.dr_editor)
+        self.defaults["descr_require_selected"] = []
+        self.defaults["descr_require_available"] = []
 
         # Push content to top
-        self.layout().addStretch()                                      # type: ignore
+        self.layout().addStretch()
 
         # Register page with model
-        root_index = self._model.register_page("filter", defaults)
+        root_index = self._model.register_page("filter", self.defaults)
 
         # Map property keys to model indices
         for row in range(self._model.rowCount(root_index)):
@@ -98,17 +102,25 @@ class FilterPage(QWidget):
 
         # Connect view to data model
         self.wm_selector.selectionChanged.connect(
-            lambda sel: self._update_model("work_models", sel))
+            lambda L: self._update_model("work_models", L))
         self.jt_selector.selectionChanged.connect(
-            lambda sel: self._update_model("job_types", sel))
+            lambda L: self._update_model("job_types", L))
         self.te_editor.selectionChanged.connect(
-            lambda sel: self._update_model("title_exclude", sel))
+            lambda L: self._update_model("title_exclude_selected", L))
+        self.te_editor.availableChanged.connect(
+            lambda L: self._update_model("title_exclude_available", L))
         self.tr_editor.selectionChanged.connect(
-            lambda sel: self._update_model("title_require", sel))
+            lambda L: self._update_model("title_require_selected", L))
+        self.tr_editor.availableChanged.connect(
+            lambda L: self._update_model("title_require_available", L))
         self.de_editor.selectionChanged.connect(
-            lambda sel: self._update_model("descr_exclude", sel))
+            lambda L: self._update_model("descr_exclude_selected", L))
+        self.de_editor.availableChanged.connect(
+            lambda L: self._update_model("descr_exclude_available", L))
         self.dr_editor.selectionChanged.connect(
-            lambda sel: self._update_model("descr_require", sel))
+            lambda L: self._update_model("descr_require_selected", L))
+        self.dr_editor.availableChanged.connect(
+            lambda L: self._update_model("descr_require_available", L))
         
         # Connect model to view updates
         self._model.dataChanged.connect(self._data_changed)
@@ -116,59 +128,59 @@ class FilterPage(QWidget):
         # Trigger initial data load
         self._data_changed(QModelIndex(), QModelIndex())
 
+    def layout(self) -> QVBoxLayout:
+        """ Override layout to remove type-checking errors. """
+        return super().layout() # type: ignore
+
     def _update_model(self, key: str, value):
         """ Update model data from view changes. """
         if key in self._idcs:
             self._model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+
+    def __get_value(self, key: str, top_left: QModelIndex):
+        """ Helper to get model value for a key if in changed range. """
+        idx = self._idcs.get(key)
+        if idx is None or (top_left.isValid() and top_left != idx):
+            return self.defaults[key]
+        val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+        return val if val is not None else self.defaults[key]
     
     @Slot(QModelIndex, QModelIndex)
     def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Work model selector
-        idx = self._idcs.get("work_models")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
-            if self.wm_selector.get_selected() != val:
-                self.wm_selector.set_selected(val)
+        val = self.__get_value("work_models", top_left)
+        if self.wm_selector.get_selected() != val:
+            self.wm_selector.set_selected(val)
         # Job type selector
-        idx = self._idcs.get("job_types")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
-            if self.jt_selector.get_selected() != val:
-                self.jt_selector.set_selected(val)
+        val = self.__get_value("job_types", top_left)
+        if self.jt_selector.get_selected() != val:
+            self.jt_selector.set_selected(val)
         # Title exclude editor
-        idx = self._idcs.get("title_exclude")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
-            selected, available = val if val is not None else ([], [])
-            if self.te_editor.get_selected() != selected:
-                self.te_editor.set_selected(selected)
-            if self.te_editor.get_available() != available:
-                self.te_editor.set_available(available)
+        selected = self.__get_value("title_exclude_selected", top_left)
+        if self.te_editor.get_selected() != selected:
+            self.te_editor.set_selected(selected)
+        available = self.__get_value("title_exclude_available", top_left)
+        if self.te_editor.get_available() != available:
+            self.te_editor.set_available(available)
         # Title require editor
-        idx = self._idcs.get("title_require")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
-            selected, available = val if val is not None else ([], [])
-            if self.tr_editor.get_selected() != selected:
-                self.tr_editor.set_selected(selected)
-            if self.tr_editor.get_available() != available:
-                self.tr_editor.set_available(available)
+        selected = self.__get_value("title_require_selected", top_left)
+        if self.tr_editor.get_selected() != selected:
+            self.tr_editor.set_selected(selected)
+        available = self.__get_value("title_require_available", top_left)
+        if self.tr_editor.get_available() != available:
+            self.tr_editor.set_available(available)
         # Description exclude editor
-        idx = self._idcs.get("descr_exclude")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
-            selected, available = val if val is not None else ([], [])
-            if self.de_editor.get_selected() != selected:
-                self.de_editor.set_selected(selected)
-            if self.de_editor.get_available() != available:
-                self.de_editor.set_available(available)
+        selected = self.__get_value("descr_exclude_selected", top_left)
+        if self.de_editor.get_selected() != selected:
+            self.de_editor.set_selected(selected)
+        available = self.__get_value("descr_exclude_available", top_left)
+        if self.de_editor.get_available() != available:
+            self.de_editor.set_available(available)
         # Description require editor
-        idx = self._idcs.get("descr_require")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
-            selected, available = val if val is not None else ([], [])
-            if self.dr_editor.get_selected() != selected:
-                self.dr_editor.set_selected(selected)
-            if self.dr_editor.get_available() != available:
-                self.dr_editor.set_available(available)
+        selected = self.__get_value("descr_require_selected", top_left)
+        if self.dr_editor.get_selected() != selected:
+            self.dr_editor.set_selected(selected)
+        available = self.__get_value("descr_require_available", top_left)
+        if self.dr_editor.get_available() != available:
+            self.dr_editor.set_available(available)

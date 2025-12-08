@@ -141,7 +141,7 @@ class QPlainTextListEdit(QWidget):
         Only activate editors when focus change is due to an actual user interaction
         (mouse, tab, backtab, or keyboard shortcut), not programmatic focus changes.
         """
-        # Handle FocusIn (Activation)
+        # Handle Activation
         if isinstance(watched, QPlainTextEdit) and event.type() == QEvent.Type.FocusIn:
             # Get the corresponding row
             row = next((r for r in self.rows if r["editor"] is watched), None)
@@ -157,9 +157,8 @@ class QPlainTextListEdit(QWidget):
                 if self.rows and self.rows[-1]["editor"] is watched:
                     # Last row activated -> Add new inactive row
                     self._add_editor_row()
-        # Handle FocusOut (Editing Finished) -> Emit Signal
-        if isinstance(watched, QPlainTextEdit) and event.type() == QEvent.Type.FocusOut:
-            # Emit changes when user leaves a field
+        # Handle Content Change
+        if isinstance(watched, QPlainTextEdit) and event.type() == QEvent.Type.KeyRelease:
             self.itemsChanged.emit(self.get_items())
         return super().eventFilter(watched, event)
 
@@ -209,6 +208,8 @@ class QPlainTextListEdit(QWidget):
             last_editor = self.rows[-1]["editor"]
             if not last_editor.isReadOnly():
                 self._add_editor_row()
+        # Emit items changed signal
+        self.itemsChanged.emit(self.get_items())
 
     @Slot()
     def _on_cancel_delete(self, row):
@@ -509,6 +510,7 @@ class QChipSelect(QWidget):
     """ Widget for selecting options using chips. """
 
     selectionChanged = Signal(list)
+    availableChanged = Signal(list)
     """ Signal emitted when the selection changes. """
 
     def __init__(self,
@@ -573,7 +575,7 @@ class QChipSelect(QWidget):
         self.add_standard_chip(text, self.selected_layout,
                                selected=True, is_custom=True)
         # Emit selection changed signal
-        self.selectionChanged.emit((self.get_selected(), self.get_available()))
+        self.selectionChanged.emit(self.get_selected())
         
     @Slot()
     def _on_move_chip(self, chip: QChip):
@@ -594,8 +596,9 @@ class QChipSelect(QWidget):
                 self.available_layout.addWidget(self.creator_chip)
             else:
                 self.available_layout.addWidget(chip)
-        # Emit selection changed signal
-        self.selectionChanged.emit((self.get_selected(), self.get_available()))
+        # Emit signals
+        self.selectionChanged.emit(self.get_selected())
+        self.availableChanged.emit(self.get_available())
 
     @Slot()
     def _on_delete_chip(self, chip: QChip):
@@ -603,9 +606,12 @@ class QChipSelect(QWidget):
         layout = chip.parentWidget().layout()   # type: ignore
         layout.removeWidget(chip)               # type: ignore
         chip.deleteLater()
-        # Emit selection changed signal if it was selected
         if is_selected:
-            self.selectionChanged.emit((self.get_selected(), self.get_available()))
+            # Deleted from selected -> Emit selected chips
+            self.selectionChanged.emit(self.get_selected())
+        else:
+            # Deleted from available -> Emit available chips
+            self.availableChanged.emit(self.get_available())
 
     def __get_items(self, layout: QFlowLayout) -> list[str]:
         items = []

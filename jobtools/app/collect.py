@@ -1,5 +1,5 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QRadioButton,
-                               QLineEdit)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
+                               QRadioButton, QLineEdit, QSpinBox)
 from PySide6.QtCore import QModelIndex, Qt, Signal, Slot
 from .model import ConfigModel
 from .custom_widgets import QHeader, QPlainTextListEdit, QChipSelect
@@ -16,6 +16,9 @@ Latest - fetches the most recent data available.
 Manual - allows specifying a custom subdirectory path."""
 
 S_TT = """Select which job sites to collect data from."""
+
+L_TT = """Locations to search for jobs in.\n
+Accepts cities, states/provinces, countries, and combinations thereof. """
 
 Q_TT = """List of search queries to use when collecting job data.
 Each query will be used to perform a separate search on each selected job site.\n
@@ -101,39 +104,53 @@ class CollectPage(QWidget):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
         self._model = model
-        self._idcs: dict[str, QModelIndex] = {}                             # type: ignore
-        defaults: dict = {}
+        self._idcs: dict[str, QModelIndex] = {}
+        self.defaults: dict = {}
         
         # Proxy editor
-        self.layout().addWidget(QHeader("Proxy Server", tooltip=P_TT))      # type: ignore
+        self.layout().addWidget(QHeader("Proxy Server", tooltip=P_TT))
         self.p_editor = QLineEdit(placeholderText="user:pass@host:port")
-        self.layout().addWidget(self.p_editor)                              # type: ignore
-        defaults["proxy"] = ""
+        self.layout().addWidget(self.p_editor)
+        self.defaults["proxy"] = ""
 
         # Data source selection
-        self.layout().addWidget(QHeader("Data Source", tooltip=DS_TT))      # type: ignore
+        self.layout().addWidget(QHeader("Data Source", tooltip=DS_TT))
         self.ds_selector = DataSourceSelector()
-        self.layout().addWidget(self.ds_selector)                           # type: ignore
-        defaults["data_source"] = ""
+        self.layout().addWidget(self.ds_selector)
+        self.defaults["data_source"] = ""
 
         # Site selection
-        self.layout().addWidget(QHeader("Job Sites", tooltip=S_TT))         # type: ignore
+        self.layout().addWidget(QHeader("Job Sites", tooltip=S_TT))
         self.s_selector = QChipSelect(base_items=["LinkedIn", "Indeed"],
                                      enable_creator=False)
-        self.layout().addWidget(self.s_selector)                            # type: ignore
-        defaults["sites"] = []
+        self.layout().addWidget(self.s_selector)
+        self.defaults["sites"] = []
+
+        # Locations editor
+        self.layout().addWidget(QHeader("Locations"))
+        self.l_editor = QChipSelect()
+        self.layout().addWidget(self.l_editor)
+        self.defaults["locations_selected"] = []
+        self.defaults["locations_available"] = []
 
         # Query editor   
-        self.layout().addWidget(QHeader("Search Queries", tooltip=Q_TT))    # type: ignore
+        self.layout().addWidget(QHeader("Search Queries", tooltip=Q_TT))
         self.q_editor = QPlainTextListEdit()
-        self.layout().addWidget(self.q_editor)                              # type: ignore
-        defaults["queries"] = []
+        self.layout().addWidget(self.q_editor)
+        self.defaults["queries"] = []
+
+        # Hours old editor
+        self.layout().addWidget(QHeader("Data Freshness (Hours Old)"))
+        self.h_editor = QSpinBox(value=24, minimum=1, maximum=8760)
+        self.h_editor.setFixedWidth(100)
+        self.layout().addWidget(self.h_editor)
+        self.defaults["hours_old"] = 24
 
         # Push content to top
-        self.layout().addStretch()                                          # type: ignore
+        self.layout().addStretch()
 
         # Register page with model
-        root_index = self._model.register_page("collect", defaults)
+        root_index = self._model.register_page("collect", self.defaults)
 
         # Map property keys to model indices
         for row in range(self._model.rowCount(root_index)):
@@ -144,13 +161,19 @@ class CollectPage(QWidget):
 
         # Connect view to data model
         self.p_editor.textChanged.connect(
-            lambda text: self._update_model("proxy", text.strip()))
+            lambda t: self._update_model("proxy", t))
         self.ds_selector.sourceChanged.connect(
-            lambda source: self._update_model("data_source", source))
+            lambda t: self._update_model("data_source", t))
         self.s_selector.selectionChanged.connect(
-            lambda sites: self._update_model("sites", sites[0]))
+            lambda L: self._update_model("sites", L))
+        self.l_editor.selectionChanged.connect(
+            lambda L: self._update_model("locations", L))
+        self.l_editor.availableChanged.connect(
+            lambda L: self._update_model("locations", L))
         self.q_editor.itemsChanged.connect(
-            lambda queries: self._update_model("queries", queries))
+            lambda L: self._update_model("queries", L))
+        self.h_editor.valueChanged.connect(
+            lambda n: self._update_model("hours_old", n))
         
         # Connect model to view updates
         self._model.dataChanged.connect(self._data_changed)
@@ -158,35 +181,50 @@ class CollectPage(QWidget):
         # Trigger initial data load
         self._data_changed(QModelIndex(), QModelIndex())
 
+    def layout(self) -> QVBoxLayout:
+        """ Override layout to remove type-checking errors. """
+        return super().layout() # type: ignore
+
     def _update_model(self, key: str, value):
         """ Update model data from view changes. """
         if key in self._idcs:
             self._model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
+    def __get_value(self, key: str, top_left: QModelIndex):
+        """ Helper to get model value for a key if in changed range. """
+        idx = self._idcs.get(key)
+        if idx is None or (top_left.isValid() and top_left != idx):
+            return self.defaults[key]
+        val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+        return val if val is not None else self.defaults[key]
+
     @Slot(QModelIndex, QModelIndex)
     def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Proxy
-        idx = self._idcs.get("proxy")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            if self.p_editor.text().strip() != val:
-                self.p_editor.setText(val)
+        val = self.__get_value("proxy", top_left)
+        if self.p_editor.text().strip() != val:
+            self.p_editor.setText(val)
         # Data source
-        idx = self._idcs.get("data_source")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            if self.ds_selector.get_source() != val:
-                self.ds_selector.set_source(val)
+        val = self.__get_value("data_source", top_left)
+        if self.ds_selector.get_source() != val:
+            self.ds_selector.set_source(val)
         # Sites
-        idx = self._idcs.get("sites")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            if self.s_selector.get_selected() != val:
-                self.s_selector.set_selected(val)
+        selected = self.__get_value("sites", top_left)
+        if self.s_selector.get_selected() != selected:
+            self.s_selector.set_selected(selected)
+        # Locations
+        selected = self.__get_value("locations_selected", top_left)
+        if self.l_editor.get_selected() != selected:
+            self.l_editor.set_selected(selected)
+        available = self.__get_value("locations_available", top_left)
+        if self.l_editor.get_available() != available:
+            self.l_editor.set_available(available)
         # Queries
-        idx = self._idcs.get("queries")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            if self.q_editor.get_items() != val:
-                self.q_editor.set_items(val)
+        val = self.__get_value("queries", top_left)
+        if self.q_editor.get_items() != val:
+            self.q_editor.set_items(val)
+        # Hours old
+        val = self.__get_value("hours_old", top_left)
+        if self.h_editor.value() != val:
+            self.h_editor.setValue(val)
