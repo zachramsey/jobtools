@@ -573,7 +573,7 @@ class QChipSelect(QWidget):
         self.add_standard_chip(text, self.selected_layout,
                                selected=True, is_custom=True)
         # Emit selection changed signal
-        self.selectionChanged.emit(self.get_selected())
+        self.selectionChanged.emit((self.get_selected(), self.get_available()))
         
     @Slot()
     def _on_move_chip(self, chip: QChip):
@@ -595,7 +595,7 @@ class QChipSelect(QWidget):
             else:
                 self.available_layout.addWidget(chip)
         # Emit selection changed signal
-        self.selectionChanged.emit(self.get_selected())
+        self.selectionChanged.emit((self.get_selected(), self.get_available()))
 
     @Slot()
     def _on_delete_chip(self, chip: QChip):
@@ -605,7 +605,7 @@ class QChipSelect(QWidget):
         chip.deleteLater()
         # Emit selection changed signal if it was selected
         if is_selected:
-            self.selectionChanged.emit(self.get_selected())
+            self.selectionChanged.emit((self.get_selected(), self.get_available()))
 
     def __get_items(self, layout: QFlowLayout) -> list[str]:
         items = []
@@ -631,9 +631,15 @@ class QChipSelect(QWidget):
             if text in self.__get_items(other_layout):
                 # Find and remove from other layout
                 for j in range(other_layout.count()):
-                    chip: QChip = other_layout.itemAt(j).widget()
-                    if chip.btn.text() == text:
+                    item = other_layout.itemAt(j)
+                    if not item:
+                        continue
+                    chip: QChip = item.widget()
+                    if chip and chip.btn.text() == text:
                         other_layout.removeWidget(chip)
+                        chip.setParent(None)
+                        chip.deleteLater()
+                        break
             is_custom = text not in self.base_items
             if i < set_layout.count():
                 # Bootstrap existing chip at this index
@@ -645,6 +651,11 @@ class QChipSelect(QWidget):
                 self.add_standard_chip(text, set_layout,
                                        selected=(set_layout == self.selected_layout),
                                        is_custom=is_custom)
+        while set_layout.count() > len(items):
+            # Remove excess chips
+            item = set_layout.takeAt(len(items))
+            if item.widget():
+                item.widget().deleteLater()
     
     def set_selected(self, items: list[str]):
         """ Overwrite selected items with the given list,
@@ -678,6 +689,9 @@ class QChipSelect(QWidget):
 class QCheckBoxSelect(QWidget):
     """ A simple checkbox selection widget. """
 
+    selectionChanged = Signal(list)
+    """ Signal emitted when the selection changes. """
+
     def __init__(self, labels: list[str] = []):
         """ Initialize the checkbox selection widget.
 
@@ -693,6 +707,7 @@ class QCheckBoxSelect(QWidget):
         for label in labels:
             cb = QCheckBox(label)
             cb.setCursor(Qt.CursorShape.PointingHandCursor)
+            cb.clicked.connect(self._on_change)
             self.layout().addWidget(cb)     # type: ignore
             self.checkboxes[label] = cb
         # Set checkbox widths to the maximum content width
@@ -703,6 +718,11 @@ class QCheckBoxSelect(QWidget):
             cb.setFixedWidth(max_width + 5)
         # Push content to the left
         self.layout().addStretch()          # type: ignore
+
+    @Slot()
+    def _on_change(self):
+        """ Emit current selection when changed. """
+        self.selectionChanged.emit(self.get_selected())
 
     def get_selected(self) -> list[str]:
         """ The list of selected checkbox labels. """

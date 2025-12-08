@@ -1,12 +1,13 @@
 import logging
-from os import path
+import os
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QStackedWidget, QPushButton, QLabel, 
                                QFrame, QButtonGroup, QSplitter, QTextEdit, QScrollArea)
 from PySide6.QtCore import Qt, QSize, QObject, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
-from .collect import CollectorPage
+from .model import ConfigModel
+from .collect import CollectPage
 from .filter import FilterPage
 from .sort import SortPage
 from .settings import SettingsPage
@@ -20,24 +21,24 @@ class JobToolsApp(QMainWindow):
     def __init__(self):
         super().__init__()
         # Setup resources
-        res_dir = path.join(path.dirname(__file__), "resources")
+        res_dir = os.path.join(os.path.dirname(__file__), "resources")
         
         # Add Roboto for default application font
-        sans_path = path.join(res_dir, "Roboto.ttf")
+        sans_path = os.path.join(res_dir, "Roboto.ttf")
         sans_font_id = QFontDatabase.addApplicationFont(sans_path)
         if sans_font_id != -1:
             sans_font = QFontDatabase.applicationFontFamilies(sans_font_id)[0]
             QGuiApplication.setFont(sans_font)
 
         # Add Roboto Mono for monospace font
-        mono_path = path.join(res_dir, "RobotoMono.ttf")
+        mono_path = os.path.join(res_dir, "RobotoMono.ttf")
         mono_font_id = QFontDatabase.addApplicationFont(mono_path)
         if mono_font_id != -1:
             mono_font = QFontDatabase.applicationFontFamilies(mono_font_id)[0]
             QFont(mono_font).setStyleHint(QFont.StyleHint.Monospace)
 
         # Add Material Symbols Outlined for icon theme
-        icon_path = path.join(res_dir, "MaterialSymbolsOutlined.ttf")
+        icon_path = os.path.join(res_dir, "MaterialSymbolsOutlined.ttf")
         icon_font_id = QFontDatabase.addApplicationFont(icon_path)
         if icon_font_id != -1:
             icon_font = QFontDatabase.applicationFontFamilies(icon_font_id)[0]
@@ -80,23 +81,26 @@ class JobToolsApp(QMainWindow):
 
         # Apply stylesheet
         app = QApplication.instance()
-        theme_path = path.join(res_dir, f"theme_{get_sys_theme()}.xml")
-        qss_path = path.join(res_dir, "custom.qss")
+        theme_path = os.path.join(res_dir, f"theme_{get_sys_theme()}.xml")
+        qss_path = os.path.join(res_dir, "custom.qss")
         apply_stylesheet(app, theme=theme_path, css_file=qss_path)
 
+        # Initialize the config model
+        cfg_model = ConfigModel()
+
         # Populate Pages
-        self.add_page("collect", CollectorPage(), "search")
-        self.add_page("filter", FilterPage(), "filter_alt")
-        self.add_page("sort", SortPage(), "sort", icon_size=40)
-        self.add_page("settings", SettingsPage(), "settings", align_bottom=True)
+        self.add_page(CollectPage(cfg_model), "collect", "search")
+        self.add_page(FilterPage(cfg_model), "filter", "filter_alt")
+        self.add_page(SortPage(cfg_model), "sort", "sort", icon_size=40)
+        self.add_page(SettingsPage(), "settings", "settings", align_bottom=True)
 
         # Select first page by default
         if self.nav_panel.btn_group.buttons():
             self.nav_panel.btn_group.buttons()[0].click()
 
     def add_page(self,
-                 page_name: str,
                  widget: QWidget,
+                 page_name: str,
                  icon_name: str,
                  icon_size: int = 32,
                  align_bottom: bool = False):

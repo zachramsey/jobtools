@@ -9,10 +9,10 @@ from qt_material import get_theme   # type: ignore
 @cache
 def get_config_dir() -> str:
     """ Get the path to the JobTools app configuration directory. """
-    cfg_path = os.path.join(os.path.dirname(__file__), "configs")
-    if not os.path.exists(cfg_path):
-        os.makedirs(cfg_path)
-    return cfg_path
+    dir = os.path.join(os.path.dirname(__file__), "configs")
+    if not os.path.exists(dir):
+        raise FileNotFoundError(f"Config directory not found at {dir}.")
+    return dir
 
 
 @cache

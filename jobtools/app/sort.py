@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QRadioButton, QSpinBox
-from PySide6.QtCore import Slot
+from PySide6.QtCore import QModelIndex, Qt, Slot
 from .custom_widgets import QHeader, QChipSelect
+from .model import ConfigModel
 from ..utils.location_parser import NAME_TO_ABBR
 
 
@@ -130,21 +131,27 @@ class DegreeValueSelector(QWidget):
     
 
 class SortPage(QWidget):
-    def __init__(self):
+    def __init__(self, model: ConfigModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
+        self._model = model
+        self._idcs: dict[str, QModelIndex] = {}                             # type: ignore
+        defaults: dict = {}
 
         # Degree value selection
-        self.layout().addWidget(QHeader("Degree Value Adjustments", tooltip=DV_TT))
+        self.layout().addWidget(                                            # type: ignore
+            QHeader("Degree Value Adjustments", tooltip=DV_TT))
         self.dv_selector = DegreeValueSelector()
-        self.layout().addWidget(self.dv_selector)
+        self.layout().addWidget(self.dv_selector)                           # type: ignore
+        defaults["degree_values"] = (0, 0, 0)
 
         # Location order selection
-        self.layout().addWidget(QHeader("Location Order", tooltip=LO_TT))
+        self.layout().addWidget(QHeader("Location Order", tooltip=LO_TT))   # type: ignore
         state_abbr = [abbr.upper() for abbr in NAME_TO_ABBR.values()]
         self.lo_selector = QChipSelect(base_items=state_abbr,
                                        enable_creator=False)
-        self.layout().addWidget(self.lo_selector)
+        self.layout().addWidget(self.lo_selector)                           # type: ignore
+        defaults["location_order"] = []
 
         # Term emphasis selections
         levels = {3: ("High Emphasis Terms (+3)", HE_TT),
@@ -152,43 +159,69 @@ class SortPage(QWidget):
                   1: ("Low Emphasis Terms (+1)", LE_TT),
                   0: ("Unemphasized Terms (+0)", NE_TT),
                   -1: ("Deemphasized Terms (-1)", DE_TT)}
-        self.te_selectors: dict[int, QChipSelect] = {}    # type: ignore
+        self.te_selectors: dict[int, QChipSelect] = {}                      # type: ignore
         for value, (label, tooltip) in levels.items():
-            self.layout().addWidget(QHeader(label, tooltip=tooltip))
+            self.layout().addWidget(QHeader(label, tooltip=tooltip))        # type: ignore
             selector = QChipSelect()
             self.te_selectors[value] = selector
-            self.layout().addWidget(selector)
+            self.layout().addWidget(selector)                               # type: ignore
+            defaults[f"terms_{str(value)}"] = ([], [])
 
         # Push content to top
-        self.layout().addStretch()
+        self.layout().addStretch()                                          # type: ignore
+        
+        # Register page with model
+        root_index = self._model.register_page("sort", defaults)
 
-    def get_selected(self) -> dict:
-        """ Get selected sort options. """
-        return {
-            "degree_values": self.dv_selector.get_values(),
-            "location_order": self.lo_selector.get_selected(),
-            "term_emphasis": {val: sel.get_selected()
-                              for val, sel in self.te_selectors.items()}
-        }
-    
-    def get_config(self) -> dict:
-        """ Access current sort configuration. """
-        return {
-            "degree_values": self.dv_selector.get_values(),
-            "location_order": self.lo_selector.get_selected(),
-            "term_emphasis": {val: {"selected": sel.get_selected(),
-                                   "available": sel.get_available()}
-                              for val, sel in self.te_selectors.items()}
-        }
-    
-    def set_config(self, config: dict):
-        """ Set sort configuration. """
-        dv = config.get("degree_values", (0, 0, 0))
-        self.dv_selector.set_values(*dv)
-        lo = config.get("location_order", [])
-        self.lo_selector.set_selected(lo)
-        te = config.get("term_emphasis", {})
-        for val, sel in self.te_selectors.items():
-            term_cfg = te.get(val, {})
-            sel.set_selected(term_cfg.get("selected", []))
-            sel.set_available(term_cfg.get("available", []))
+        # Map property keys to model indices
+        for row in range(self._model.rowCount(root_index)):
+            idx = self._model.index(row, 0, root_index)
+            key = self._model.data(idx)
+            val_idx = self._model.index(row, 1, root_index)
+            self._idcs[key] = val_idx
+
+        # Connect view to data model
+        self.dv_selector.spin_ba.valueChanged.connect(
+            lambda val: self._update_model("degree_values", self.dv_selector.get_values()))
+        self.lo_selector.selectionChanged.connect(
+            lambda selection: self._update_model("location_order", selection[0]))
+        for value, selector in self.te_selectors.items():
+            selector.selectionChanged.connect(
+                lambda selection, v=value: self._update_model(f"terms_{str(v)}", selection))
+        
+        # Connect model to view updates
+        self._model.dataChanged.connect(self._data_changed)
+
+        # Trigger initial data load
+        self._data_changed(QModelIndex(), QModelIndex())
+
+    def _update_model(self, key: str, value):
+        """ Update model data from view changes. """
+        if key in self._idcs:
+            self._model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+
+    @Slot(QModelIndex, QModelIndex)
+    def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
+        """ Update view when model data changes. """
+        # Degree values
+        idx = self._idcs.get("degree_values")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
+            if self.dv_selector.get_values() != val:
+                self.dv_selector.set_values(*val)
+        # Location order
+        idx = self._idcs.get("location_order")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.EditRole)
+            if self.lo_selector.get_selected() != val:
+                self.lo_selector.set_selected(val)
+        # Term emphasis selectors
+        for value, selector in self.te_selectors.items():
+            idx = self._idcs.get(f"terms_{str(value)}")
+            if idx is not None and (not top_left.isValid() or top_left == idx):
+                val = self._model.data(idx, Qt.ItemDataRole.EditRole)
+                selected, available = val if val is not None else ([], [])
+                if selector.get_selected() != selected:
+                    selector.set_selected(selected)
+                if selector.get_available() != available:
+                    selector.set_available(available)

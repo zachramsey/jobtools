@@ -7,7 +7,7 @@ from .utils import get_config_dir
 
 class TreeItem:
     """ A node in the configuration tree. """
-    def __init__(self, data: list, parent: 'TreeItem'|None = None):
+    def __init__(self, data: list, parent=None):
         self._item_data = data  # [Key, Value]
         self._parent = parent
         self._child_items: list[TreeItem] = []
@@ -44,6 +44,12 @@ class TreeItem:
         if self._parent:
             return self._parent._child_items.index(self)
         return 0
+    
+    def find_child_by_key(self, key: str):
+        for child in self._child_items:
+            if child.data(0) == key:
+                return child
+        return None
 
 
 class ConfigModel(QAbstractItemModel):
@@ -52,32 +58,70 @@ class ConfigModel(QAbstractItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._root_item = TreeItem(["Property", "Value"])
-        # Structure: Category -> Setting Name -> Value
-        
-        # Collector Config Page
-        collect = TreeItem(["collect", ""], self._root_item)
-        collect.append_child(TreeItem(["proxy", ""], collect))
-        collect.append_child(TreeItem(["data_source", ""], collect))
-        collect.append_child(TreeItem(["sites", []], collect))
-        collect.append_child(TreeItem(["queries", []], collect))
-        self._root_item.append_child(collect)
 
-        # Filter Config Page
-        filt = TreeItem(["filter", ""], self._root_item)
-        filt.append_child(TreeItem(["work_models", []], filt))
-        filt.append_child(TreeItem(["job_types", []], filt))
-        filt.append_child(TreeItem(["title_exclude", {"selected": [], "available": []}], filt))
-        filt.append_child(TreeItem(["title_require", {"selected": [], "available": []}], filt))
-        filt.append_child(TreeItem(["descr_exclude", {"selected": [], "available": []}], filt))
-        filt.append_child(TreeItem(["descr_require", {"selected": [], "available": []}], filt))
-        self._root_item.append_child(filt)
+        # Path to persistent config file
+        self._cfg_path = os.path.join(get_config_dir(), "persistent.json")
 
-        # Sorting Config Page
-        sort = TreeItem(["sort", ""], self._root_item)
-        sort.append_child(TreeItem(["degree_values", (0,0,0)], sort))
-        sort.append_child(TreeItem(["location_order", []], sort))
-        sort.append_child(TreeItem(["term_emphasis", {}], sort))
-        self._root_item.append_child(sort)
+        # Load existing config if it exists
+        if os.path.exists(self._cfg_path):
+            self.load_from_file(self._cfg_path)
+
+        # Auto-save on data change
+        self.dataChanged.connect(lambda: self.save_to_file(self._cfg_path))
+
+    def register_page(self, page_name: str, defaults: dict) -> QModelIndex:
+        """ Register a new page in the configuration model.
+
+        Parameters
+        ----------
+        page_name : str
+            Name identifier for the page.
+        defaults : dict
+            Default configuration values for the page.
+
+        Returns
+        -------
+        QModelIndex
+            The index of the root item for the registered page.
+        """
+        root = self._root_item
+        page_item = root.find_child_by_key(page_name)
+
+        if not page_item:
+            self.beginInsertRows(QModelIndex(), root.child_count(), root.child_count())
+            page_item = TreeItem([page_name, None], root)
+            root.append_child(page_item)
+            self._build_tree(defaults, page_item)
+            self.endInsertRows()
+        else:
+            self._merge_defaults(defaults, page_item)
+
+        return self.index(page_item.row(), 0, QModelIndex())
+    
+    def _build_tree(self, data: dict, parent_item: TreeItem):
+        for key, value in data.items():
+            if isinstance(value, dict):
+                child_item = TreeItem([key, None], parent_item)
+                parent_item.append_child(child_item)
+                self._build_tree(value, child_item)
+            else:
+                child_item = TreeItem([key, value], parent_item)
+                parent_item.append_child(child_item)
+
+    def _merge_defaults(self, defaults: dict, parent_item: TreeItem):
+        for key, value in defaults.items():
+            child_item = parent_item.find_child_by_key(key)
+            if not child_item:
+                if isinstance(value, dict):
+                    new_item = TreeItem([key, None], parent_item)
+                    parent_item.append_child(new_item)
+                    self._build_tree(value, new_item)
+                else:
+                    new_item = TreeItem([key, value], parent_item)
+                    parent_item.append_child(new_item)
+            else:
+                if isinstance(value, dict):
+                    self._merge_defaults(value, child_item)
 
     def index(self, row, column, parent=QModelIndex()):
         if not self.hasIndex(row, column, parent):
@@ -117,10 +161,7 @@ class ConfigModel(QAbstractItemModel):
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
-
         item = index.internalPointer()
-        
-        # EditRole returns the raw Python object (list, dict, etc.)
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
             return item.data(index.column())
         
@@ -148,24 +189,26 @@ class ConfigModel(QAbstractItemModel):
             return self._root_item.data(section)
         return None
 
-    def save_to_file(self, filename: str):
-        """ Dump the current configuration to a JSON file. """
+    def save_to_file(self, filepath: str):
+        """ Save the current configuration to a JSON file. """
+        if not filepath.endswith(".json"):
+            raise ValueError(f"Filepath must point to a JSON file. Got: {filepath}")
         data = self._recursive_dump(self._root_item)
-        filepath = os.path.join(get_config_dir(), f"{filename}.json")
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=4)
 
-    def load_from_file(self, filename: str):
+    def load_from_file(self, filepath: str):
         """ Load configuration from a JSON file. """
+        if not filepath.endswith(".json"):
+            raise ValueError(f"Filepath must point to a JSON file. Got: {filepath}")
         try:
-            filepath = os.path.join(get_config_dir(), f"{filename}.json")
             with open(filepath, 'r') as f:
                 data = json.load(f)
             self.beginResetModel()
             self._recursive_load(data, self._root_item)
             self.endResetModel()
         except FileNotFoundError:
-            print("Config file not found, keeping defaults.")
+            pass
 
     def _recursive_dump(self, item):
         if item.child_count() == 0:
@@ -183,15 +226,19 @@ class ConfigModel(QAbstractItemModel):
         if not isinstance(data_dict, dict):
             # Not a dict -> backtrack
             return
-        # Iterate over children of parent_item
-        for i in range(parent_item.child_count()):
-            child = parent_item.child(i)
-            key = child.data(0)
-            if key in data_dict:
-                val = data_dict[key]
-                if child.child_count() > 0:
-                     # Item has children -> go deeper
-                    self._recursive_load(val, child)
+        for key, value in data_dict.items():
+            child_item = parent_item.find_child_by_key(key)
+            if not child_item:
+                # Key not found in model -> Create new item
+                if isinstance(value, dict):
+                    new_item = TreeItem([key, None], parent_item)
+                    parent_item.append_child(new_item)
+                    self._recursive_load(value, new_item)
                 else:
-                    # Leaf item -> set value
-                    child.set_data(1, val)
+                    new_item = TreeItem([key, value], parent_item)
+                    parent_item.append_child(new_item)
+            else:
+                if isinstance(value, dict):
+                    self._recursive_load(value, child_item)
+                else:
+                    child_item.set_data(1, value)
