@@ -1,9 +1,8 @@
-import logging
 import os
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                               QHBoxLayout, QStackedWidget, QPushButton, QLabel, 
-                               QFrame, QButtonGroup, QSplitter, QTextEdit, QScrollArea)
-from PySide6.QtCore import Qt, QSize, QObject, Signal, Slot
+                               QHBoxLayout, QStackedWidget, QPushButton,
+                               QFrame, QButtonGroup, QScrollArea)
+from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
 from .model import ConfigModel
@@ -11,9 +10,9 @@ from .runner import RunnerPage
 from .collect import CollectPage
 from .filter import FilterPage
 from .sort import SortPage
+from .console import ConsolePanel
 from .settings import SettingsPage
 from .utils import get_icon, get_sys_theme
-from ..utils.logger import JDLogger
 
 
 class JobToolsApp(QMainWindow):
@@ -56,29 +55,15 @@ class JobToolsApp(QMainWindow):
         main_layout.setSpacing(0)
         self.setCentralWidget(main_widget)
 
-        # Splitter between pages and log panel
-        self.log_splitter = QSplitter(Qt.Orientation.Vertical)
-
         # Pages Area
         self.pages = QStackedWidget()
-
-        # Log Panel
-        self.log_panel = LogPanel(self.log_splitter)
-        self.log_panel.hide()
-
-        # Assemble Splitter (Pages/Log)
-        self.log_splitter.addWidget(self.pages)
-        self.log_splitter.addWidget(self.log_panel)
 
         # Sidebar Navigation
         self.nav_panel = NavPanel(self.pages)
 
-        # Assemble Main Layout (Sidebar|Splitter)
-        self.log_splitter.setCollapsible(0, False)
+        # Assemble Main Layout (Sidebar|Pages)
         main_layout.addWidget(self.nav_panel)
-        self.log_splitter.setStretchFactor(0, 1)
-        main_layout.addWidget(self.log_splitter)
-        self.log_splitter.setStretchFactor(1, 0)
+        main_layout.addWidget(self.pages)
 
         # Apply stylesheet
         app = QApplication.instance()
@@ -97,6 +82,7 @@ class JobToolsApp(QMainWindow):
         self.add_page(CollectPage(cfg_model), "collect", "search")
         self.add_page(FilterPage(cfg_model), "filter", "filter_alt")
         self.add_page(SortPage(cfg_model), "sort", "sort", icon_size=40)
+        self.add_page(ConsolePanel(), "console", "terminal", icon_size=40, align_bottom=True)
         self.add_page(SettingsPage(), "settings", "settings", align_bottom=True)
 
         # Select first page by default
@@ -146,96 +132,6 @@ class JobToolsApp(QMainWindow):
         scrollable.setWidget(widget)
         index = self.pages.addWidget(scrollable)
         btn.setProperty("page_index", index)
-
-
-class QtLogHandler(QObject, logging.Handler):
-    """ Custom logging handler that emits log messages as Qt signals. """
-
-    log_signal = Signal(str)
-    """ Signal emitted with log message string. """
-
-    def __init__(self, parent: QObject | None = None):
-        """ Initialize the QtLogger with optional parent. """
-        super().__init__(parent)
-        logging.Handler.__init__(self, level=logging.INFO)
-        
-    def emit(self, record):
-        """ Send the formatted log record as a Qt signal. """
-        self.log_signal.emit(self.format(record))
-
-
-class LogPanel(QWidget):
-    """ Bottom log panel for displaying console output. """
-
-    def __init__(self, splitter: QSplitter):
-        """ Setup the log panel UI components. """
-        super().__init__()
-        self._splitter = splitter
-        self.setProperty("class", "log-panel")
-
-        # Layout Setup
-        self.setLayout(QVBoxLayout(self))
-        self.layout().setContentsMargins(0, 0, 0, 0)    # type: ignore
-        self.layout().setSpacing(0)                     # type: ignore
-
-        # Logger Setup
-        log_handler = QtLogHandler()
-
-        # Attach to JTLogger
-        logger = JDLogger()
-        logger.configure("INFO")
-        logger.addHandler(log_handler)
-        log_handler.log_signal.connect(self._on_console_output)
-
-        # Header
-        header = QFrame()
-        header.setFixedHeight(30)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(10, 0, 5, 0)
-
-        # Header Title
-        title = QLabel("CONSOLE")
-
-        # Close Button
-        close_btn = QPushButton()
-        close_btn.setIcon(get_icon("close"))
-        close_btn.setIconSize(QSize(16, 16))
-        close_btn.setFixedSize(24, 24)
-        close_btn.setFlat(True)
-        close_btn.clicked.connect(self.hide)
-
-        # Assemble Header (Title|<->|Close)
-        header_layout.addWidget(title)
-        header_layout.addStretch()
-        header_layout.addWidget(close_btn)
-
-        # Log Text Area
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        self.log_output.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-
-        # Assemble Log Panel
-        self.layout().addWidget(header)                 # type: ignore
-        self.layout().addWidget(self.log_output)        # type: ignore
-
-    @Slot()
-    def _on_console_output(self, text):
-        """ Handle text coming from logger. """
-        if not text.strip():
-            return
-        sizes = self._splitter.sizes()
-        height = sizes[1] if len(sizes) > 1 else 0
-        if self.isHidden() or height == 0:
-            # Show log panel if hidden
-            self.show()
-            total = sum(sizes)
-            if total > 0:
-                # Adjust splitter to allocate space for log panel
-                self._splitter.setSizes([int(total * 0.7), int(total * 0.3)])
-        # Append text to log output
-        self.log_output.append(text)
-        sb = self.log_output.verticalScrollBar()
-        sb.setValue(sb.maximum())
 
 
 class NavPanel(QFrame):
