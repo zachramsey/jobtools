@@ -3,8 +3,8 @@ import json
 import os
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
 import threading
-from .utils import get_config_dir
-from ..jobsdata import JobsData
+from ..utils import get_config_dir
+from ...jobsdata import JobsData
 
 
 class TreeItem:

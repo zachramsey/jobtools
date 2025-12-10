@@ -1,7 +1,7 @@
 import logging
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTextEdit
 from PySide6.QtCore import QObject, Signal, Slot
-from ..utils.logger import JDLogger
+from ...utils.logger import JDLogger
 
 
 class QtLogHandler(QObject, logging.Handler):

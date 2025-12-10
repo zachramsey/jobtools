@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import QModelIndex, Qt, Slot
 from jobspy.model import JobType    # type: ignore
-from .custom_widgets import QHeader, QChipSelect, QCheckBoxSelect
-from .model import ConfigModel
+from ..custom_widgets import QHeader, QChipSelect, QCheckBoxSelect
+from ..models.config_model import ConfigModel
 
 
 WM_TT = """Select which work models to include in results.\n

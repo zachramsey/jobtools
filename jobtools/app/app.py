@@ -5,13 +5,13 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
-from .model import ConfigModel
-from .runner import RunnerPage
-from .collect import CollectPage
-from .filter import FilterPage
-from .sort import SortPage
-from .console import ConsolePanel
-from .settings import SettingsPage
+from .models.config_model import ConfigModel
+from .views.runner import RunnerPage
+from .views.collect import CollectPage
+from .views.filter import FilterPage
+from .views.sort import SortPage
+from .views.console import ConsolePanel
+from .views.settings import SettingsPage
 from .utils import get_icon, get_sys_theme
 
 

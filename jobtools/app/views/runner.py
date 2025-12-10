@@ -4,10 +4,10 @@ from PySide6.QtCore import Qt, QModelIndex, QObject, Signal, Slot, QThread, QUrl
 from PySide6.QtGui import QDesktopServices
 import threading
 import traceback
-from .custom_widgets import QHeader
-from .model import ConfigModel
-from .utils import get_config_dir
-from ..utils.logger import JDLogger
+from ..custom_widgets import QHeader
+from ..models.config_model import ConfigModel
+from ..utils import get_config_dir
+from ...utils.logger import JDLogger
 
 
 SC_TT = """"""

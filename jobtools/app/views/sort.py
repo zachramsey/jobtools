@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QRadioButton, QSpinBox
 from PySide6.QtCore import QModelIndex, Qt, Slot, Signal
-from .custom_widgets import QHeader, QChipSelect
-from .model import ConfigModel
-from ..utils.location_parser import NAME_TO_ABBR
+from ..custom_widgets import QHeader, QChipSelect
+from ..models.config_model import ConfigModel
+from ...utils.location_parser import NAME_TO_ABBR
 
 
 DV_TT = """Adjust sorting values based on degree levels.\n

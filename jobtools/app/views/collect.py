@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QRadioButton, QLineEdit, QSpinBox)
 from PySide6.QtCore import QModelIndex, Qt, Signal, Slot
-from .model import ConfigModel
-from .custom_widgets import QHeader, QPlainTextListEdit, QChipSelect
+from ..models.config_model import ConfigModel
+from ..custom_widgets import QHeader, QPlainTextListEdit, QChipSelect
 
 
 P_TT = """Optional proxy server for web requests.\n
