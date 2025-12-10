@@ -7,12 +7,13 @@ from PySide6.QtCore import Qt, QSize, QObject, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
 from .model import ConfigModel
+from .runner import RunnerPage
 from .collect import CollectPage
 from .filter import FilterPage
 from .sort import SortPage
 from .settings import SettingsPage
 from .utils import get_icon, get_sys_theme
-from ..utils.logger import JTLogger
+from ..utils.logger import JDLogger
 
 
 class JobToolsApp(QMainWindow):
@@ -83,12 +84,16 @@ class JobToolsApp(QMainWindow):
         app = QApplication.instance()
         theme_path = os.path.join(res_dir, f"theme_{get_sys_theme()}.xml")
         qss_path = os.path.join(res_dir, "custom.qss")
-        apply_stylesheet(app, theme=theme_path, css_file=qss_path)
+        light_extra = {'danger': '#DB3E03', 'warning': '#977100', 'success': '#008679'}
+        dark_extra = {'danger': '#FF8B69', 'warning': '#D8A300', 'success': '#48BDAE'}
+        extra = dark_extra if get_sys_theme() == "dark" else light_extra
+        apply_stylesheet(app, theme=theme_path, css_file=qss_path, extra=extra)
 
         # Initialize the config model
         cfg_model = ConfigModel()
 
         # Populate Pages
+        self.add_page(RunnerPage(cfg_model), "runner", "play_arrow", icon_size=36)
         self.add_page(CollectPage(cfg_model), "collect", "search")
         self.add_page(FilterPage(cfg_model), "filter", "filter_alt")
         self.add_page(SortPage(cfg_model), "sort", "sort", icon_size=40)
@@ -156,8 +161,7 @@ class QtLogHandler(QObject, logging.Handler):
         
     def emit(self, record):
         """ Send the formatted log record as a Qt signal. """
-        log_entry = self.format(record)
-        self.log_signal.emit(log_entry)
+        self.log_signal.emit(self.format(record))
 
 
 class LogPanel(QWidget):
@@ -167,6 +171,7 @@ class LogPanel(QWidget):
         """ Setup the log panel UI components. """
         super().__init__()
         self._splitter = splitter
+        self.setProperty("class", "log-panel")
 
         # Layout Setup
         self.setLayout(QVBoxLayout(self))
@@ -175,7 +180,10 @@ class LogPanel(QWidget):
 
         # Logger Setup
         log_handler = QtLogHandler()
-        logger = JTLogger()
+
+        # Attach to JTLogger
+        logger = JDLogger()
+        logger.configure("INFO")
         logger.addHandler(log_handler)
         log_handler.log_signal.connect(self._on_console_output)
 
@@ -213,13 +221,16 @@ class LogPanel(QWidget):
     @Slot()
     def _on_console_output(self, text):
         """ Handle text coming from logger. """
-        if self.isHidden() and text.strip():
+        if not text.strip():
+            return
+        sizes = self._splitter.sizes()
+        height = sizes[1] if len(sizes) > 1 else 0
+        if self.isHidden() or height == 0:
             # Show log panel if hidden
             self.show()
-            sizes = self._splitter.sizes()
-            if sizes[1] == 0:
+            total = sum(sizes)
+            if total > 0:
                 # Adjust splitter to allocate space for log panel
-                total = sum(sizes)
                 self._splitter.setSizes([int(total * 0.7), int(total * 0.3)])
         # Append text to log output
         self.log_output.append(text)

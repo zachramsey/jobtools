@@ -4,10 +4,11 @@ from markdownify import MarkdownConverter           # type: ignore
 from markdownify import ATX, SPACES, UNDERSCORE     # type: ignore
 import os
 import pandas as pd
+from typing import Callable
 import re
 
 from . import HTMLBuilder
-from .utils.logger import JTLogger
+from .utils.logger import JDLogger
 from .utils import parse_degrees, parse_location, build_regex
 
 
@@ -15,9 +16,11 @@ class JobsData:
     """ Wrapper around jobspy API to collect and process job postings.
     """
 
-    _logger = JTLogger()
+    _out_path = os.path.join(os.path.dirname(__file__), "output")
+    """ Base output directory path for job data. """
+
+    _logger = JDLogger()
     """ Logger instance for JobsData class. """
-    _logger.configure("WARNING")
     
     _converter = MarkdownConverter(bullets='*',
                                    default_title=True,
@@ -37,7 +40,7 @@ class JobsData:
         """
         date = dt.datetime.now().strftime("%Y%m%d")
         time = dt.datetime.now().strftime('%H%M')
-        self._new_path = os.path.join("output", date, time)
+        self._new_path = os.path.join(self._out_path, date, time)
         """ Unique output directory for new/modified data. """
 
         self._load_path = ""
@@ -90,7 +93,7 @@ class JobsData:
             return self._load_path
         
     @property
-    def logger(self) -> JTLogger:
+    def logger(self) -> JDLogger:
         """ Get the JobsData logger instance. """
         return self._logger
         
@@ -116,7 +119,7 @@ class JobsData:
 
             *Options:*
             - *`""` -> no existing data (Default)*
-            - *`"recent"` -> load most recent output directory*
+            - *`"latest"` -> load most recent output directory*
             - *`"global"` -> load global jobs_data.csv*
             - *`"{yyyymmdd}/{HHMM}"` -> load specified subdirectory*
 
@@ -137,12 +140,12 @@ class JobsData:
             # Determine full path based on source
             if source == "global":
                 # Load output/jobs_data.csv
-                path = os.path.join("output", "global", "jobs_data.csv")
-            elif source == "recent":
+                path = os.path.join(cls._out_path, "global", "jobs_data.csv")
+            elif source == "latest":
                 # Find most recent day-wise subdirectory
                 day_dirs = []
-                for d in os.listdir("output"):
-                    if (os.path.isdir(os.path.join("output", d)) and
+                for d in os.listdir(cls._out_path):
+                    if (os.path.isdir(os.path.join(cls._out_path, d)) and
                         re.match(r"^\d{4}[01]\d[0-3]\d$", d)):
                         day_dirs.append(d)
                 if len(day_dirs) == 0:
@@ -151,8 +154,8 @@ class JobsData:
                 day_dir = day_dirs[-1]
                 # Find most recent time-wise subdirectory
                 time_dirs = []
-                for d in os.listdir(os.path.join("output", day_dir)):
-                    if (os.path.isdir(os.path.join("output", day_dir, d)) and
+                for d in os.listdir(os.path.join(cls._out_path, day_dir)):
+                    if (os.path.isdir(os.path.join(cls._out_path, day_dir, d)) and
                         re.match(r"^[0-2]\d[0-5]\d$", d)):
                         time_dirs.append(d)
                 if len(time_dirs) == 0:
@@ -160,13 +163,13 @@ class JobsData:
                 time_dirs.sort()
                 time_dir = time_dirs[-1]
                 # Construct full path to jobs_data.csv
-                path = os.path.join("output", day_dir, time_dir, "jobs_data.csv")
+                path = os.path.join(cls._out_path, day_dir, time_dir, "jobs_data.csv")
             else:
                 # Use specified directory
-                if source.startswith("output"):
+                if source.startswith(cls._out_path):
                     path = source
                 else:
-                    path = os.path.join("output", source)
+                    path = os.path.join(cls._out_path, source)
                 # If path is a directory, append jobs_data.csv
                 if os.path.isdir(path):
                     path = os.path.join(path, "jobs_data.csv")
@@ -269,6 +272,7 @@ class JobsData:
         self.preprocess()
         # Mark data as modified
         self._modified = True
+        self.logger.info(f"Collected {len(self._df) - n_init} new jobs.")
         return len(self._df) - n_init
     
     def update(self, other):
@@ -281,33 +285,68 @@ class JobsData:
             raise TypeError(f"Unsupported type for update with JobsData: {type(other)}")
         self._df.reset_index(drop=True, inplace=True)
 
-    def exists(self, column: str, expression: list[str]|str) -> pd.Series:
-        """ Create a new boolean column indicating presence of terms in source column.
+    def exists(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
+        """ Create a boolean mask indicating which rows match the specified expression.
         
         Parameters
         ----------
         column : str
             Name of the source column to search.
-        expression : list[str]|str
-            A list of terms or a regex pattern.
+        expression : list[str]|str|bool|int|float|pd.Series|Callable
+            Expression defining the terms or matches to search for.
+
+            *Supported types:*
+            - *string or list[str] -> regex matching*
+            - *bool/int/float -> direct equality (useful for boolean columns)*
+            - *list/tuple/set of scalars -> .isin() matching*
+            - *pd.Series (boolean mask) -> reindex/align to stored DataFrame*
+            - *Callable -> custom mask builder: Callable(series) -> boolean Series*
 
         Returns
         -------
-        pd.Series
-            Series of boolean values.
+        mask : pd.Series
+            Boolean mask indicating which rows match the expression.
         """
-        pattern = build_regex(expression)
-        return self._df[column].str.contains(pattern, case=False, na=False)
+        if column not in self._df.columns:
+            self._logger.warning(f"Column '{column}' not found in DataFrame.")
+            mask = pd.Series(False, index=self._df.index)
+        elif callable(expression):
+            mask = pd.Series(expression(self._df[column]), index=self._df.index).astype(bool)
+        elif isinstance(expression, pd.Series):
+            mask = expression.reindex(self._df.index).fillna(False).astype(bool)
+        elif isinstance(expression, (bool, int, float)):
+            mask = (self._df[column] == expression).fillna(False)
+        elif isinstance(expression, (list, tuple, set)):
+            if all(isinstance(item, (bool, int, float)) for item in expression):
+                mask = self._df[column].isin(expression).fillna(False)
+            elif all(isinstance(item, str) for item in expression):
+                pattern = build_regex(expression)   # type: ignore
+                mask = self._df[column].str.contains(pattern, case=False, na=False)
+            else:
+                self._logger.warning(f"Unsupported expression list types for column '{column}'.")
+                mask = pd.Series(False, index=self._df.index)
+        else:
+            #Fallback: string patterns
+            pattern = build_regex(expression)
+            mask = self._df[column].str.contains(pattern, case=False, na=False)
+        return mask
     
-    def omit(self, column: str, expression: list[str]|str) -> int:
-        """ Omit rows where the specified column contains any of the given terms.
-
+    def exclude(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> int:
+        """ Exclude rows that match the specified expression in the given column.
+        
         Parameters
         ----------
         column : str
-            Column name to check.
-        expression : list[str]|str
-            A list of terms or a regex pattern.
+            Name of the source column to search.
+        expression : list[str]|str|bool|int|float|pd.Series|Callable
+            Expression defining the terms or matches to search for.
+
+            *Supported types:*
+            - *string or list[str] -> regex matching*
+            - *bool/int/float -> direct equality (useful for boolean columns)*
+            - *list/tuple/set of scalars -> .isin() matching*
+            - *pd.Series (boolean mask) -> reindex/align to stored DataFrame*
+            - *Callable -> custom mask builder: Callable(series) -> boolean Series*
 
         Returns
         -------
@@ -316,17 +355,25 @@ class JobsData:
         """
         n_init = len(self._df)
         self._df = self._df[~self.exists(column, expression)]
+        self.logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` rejection filter.")
         return n_init - len(self._df)
 
-    def require(self, column: str, expression: list[str]|str) -> int:
-        """ Require rows where the specified column contains any of the given terms.
-
+    def select(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> int:
+        """ Select rows that match the specified expression in the given column.
+        
         Parameters
         ----------
         column : str
-            Column name to check.
-        expression : list[str]|str
-            A list of terms or a regex pattern.
+            Name of the source column to search.
+        expression : list[str]|str|bool|int|float|pd.Series|Callable
+            Expression defining the terms or matches to search for.
+
+            *Supported types:*
+            - *string or list[str] -> regex matching*
+            - *bool/int/float -> direct equality (useful for boolean columns)*
+            - *list/tuple/set of scalars -> .isin() matching*
+            - *pd.Series (boolean mask) -> reindex/align to stored DataFrame*
+            - *Callable -> custom mask builder: Callable(series) -> boolean Series*
 
         Returns
         -------
@@ -335,6 +382,7 @@ class JobsData:
         """
         n_init = len(self._df)
         self._df = self._df[self.exists(column, expression)]
+        self.logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` requirement filter.")
         return n_init - len(self._df)
 
     def degree_score(self, degree_values: tuple[int, int, int]) -> pd.Series:
@@ -469,6 +517,7 @@ class JobsData:
         for subset in subsets:
             self._df.drop_duplicates(subset=subset, inplace=True)
         self._df.reset_index(drop=True)
+        self.logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
         return n_init - len(self._df)
     
     def _validate_path(self, path: str, file_name: str) -> str:
@@ -504,7 +553,9 @@ class JobsData:
             os.makedirs(path)
         # Determine output file path
         file = os.path.join(path, file_name)
-        if not path.startswith(os.path.join("output", "global")):
+        # if not path.startswith(os.path.join(self._out_path, "global")):
+        # Make sure we don't overwrite existing HTML results
+        if extension == "html":
             i = 0
             while os.path.exists(file):
                 i += 1

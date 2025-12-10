@@ -121,10 +121,12 @@ class CollectPage(QWidget):
 
         # Site selection
         self.layout().addWidget(QHeader("Job Sites", tooltip=S_TT))
-        self.s_selector = QChipSelect(base_items=["LinkedIn", "Indeed"],
-                                     enable_creator=False)
+        available = ["LinkedIn", "Indeed"]
+        self.s_selector = QChipSelect(base_items=available,
+                                      enable_creator=False)
         self.layout().addWidget(self.s_selector)
-        self.defaults["sites"] = []
+        self.defaults["sites_selected"] = []
+        self.defaults["sites_available"] = available
 
         # Locations editor
         self.layout().addWidget(QHeader("Locations"))
@@ -165,11 +167,13 @@ class CollectPage(QWidget):
         self.ds_selector.sourceChanged.connect(
             lambda t: self._update_model("data_source", t))
         self.s_selector.selectionChanged.connect(
-            lambda L: self._update_model("sites", L))
+            lambda L: self._update_model("sites_selected", L))
+        self.s_selector.availableChanged.connect(
+            lambda L: self._update_model("sites_available", L))
         self.l_editor.selectionChanged.connect(
-            lambda L: self._update_model("locations", L))
+            lambda L: self._update_model("locations_selected", L))
         self.l_editor.availableChanged.connect(
-            lambda L: self._update_model("locations", L))
+            lambda L: self._update_model("locations_available", L))
         self.q_editor.itemsChanged.connect(
             lambda L: self._update_model("queries", L))
         self.h_editor.valueChanged.connect(
@@ -202,29 +206,56 @@ class CollectPage(QWidget):
     def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Proxy
-        val = self.__get_value("proxy", top_left)
-        if self.p_editor.text().strip() != val:
-            self.p_editor.setText(val)
+        idx = self._idcs.get("proxy")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["proxy"]
+            if self.p_editor.text().strip() != val:
+                self.p_editor.setText(val)
         # Data source
-        val = self.__get_value("data_source", top_left)
-        if self.ds_selector.get_source() != val:
-            self.ds_selector.set_source(val)
+        idx = self._idcs.get("data_source")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["data_source"]
+            if self.ds_selector.get_source() != val:
+                self.ds_selector.set_source(val)
         # Sites
-        selected = self.__get_value("sites", top_left)
-        if self.s_selector.get_selected() != selected:
-            self.s_selector.set_selected(selected)
+        idx = self._idcs.get("sites_selected")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["sites_selected"]
+            if self.s_selector.get_selected() != val:
+                self.s_selector.set_selected(val)
+        idx = self._idcs.get("sites_available")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["sites_available"]
+            if self.s_selector.get_available() != val:
+                self.s_selector.set_available(val)
         # Locations
-        selected = self.__get_value("locations_selected", top_left)
-        if self.l_editor.get_selected() != selected:
-            self.l_editor.set_selected(selected)
-        available = self.__get_value("locations_available", top_left)
-        if self.l_editor.get_available() != available:
-            self.l_editor.set_available(available)
+        idx = self._idcs.get("locations_selected")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self.__get_value("locations_selected", top_left)
+            val = val if val is not None else self.defaults["locations_selected"]
+            if self.l_editor.get_selected() != val:
+                self.l_editor.set_selected(val)
+        idx = self._idcs.get("locations_available")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self.__get_value("locations_available", top_left)
+            val = val if val is not None else self.defaults["locations_available"]
+            if self.l_editor.get_available() != val:
+                self.l_editor.set_available(val)
         # Queries
-        val = self.__get_value("queries", top_left)
-        if self.q_editor.get_items() != val:
-            self.q_editor.set_items(val)
+        idx = self._idcs.get("queries")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["queries"]
+            if self.q_editor.get_items() != val:
+                self.q_editor.set_items(val)
         # Hours old
-        val = self.__get_value("hours_old", top_left)
-        if self.h_editor.value() != val:
-            self.h_editor.setValue(val)
+        idx = self._idcs.get("hours_old")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["hours_old"]
+            if self.h_editor.value() != val:
+                self.h_editor.setValue(val)

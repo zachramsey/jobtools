@@ -1,8 +1,8 @@
 from enum import Enum
 from PySide6.QtWidgets import (
-    QWidget, QSizePolicy, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
-    QPushButton, QLayout, QFrame, QLineEdit, QStackedLayout, QMenu,
-    QCheckBox, QLabel
+    QWidget, QWidgetItem, QSizePolicy, QVBoxLayout, QHBoxLayout,
+    QPlainTextEdit, QPushButton, QLayout, QFrame, QLineEdit,
+    QStackedLayout, QMenu, QCheckBox, QLabel
 )
 from PySide6.QtCore import Qt, QEvent, Slot, QPoint, QRect, QSize, Signal
 # from PySide6.QtGui
@@ -281,6 +281,12 @@ class QFlowLayout(QLayout):
         self._v_spacing = v_spacing
         self._item_list = []
 
+    def insertWidget(self, index: int, widget):
+        """Insert a widget into the layout at the given index."""
+        item = QWidgetItem(widget)
+        self._item_list.insert(index, item)
+        self.addChildWidget(widget)
+
     def addItem(self, item):
         self._item_list.append(item)
 
@@ -545,7 +551,7 @@ class QChipSelect(QWidget):
         # Initialization
         if base_items:
             for text in base_items:
-                self.add_standard_chip(text, self.available_layout)  
+                self.add_standard_chip(text, self.available_layout)
         if enable_creator:
             self.add_creator_chip()
 
@@ -554,8 +560,10 @@ class QChipSelect(QWidget):
                           selected: bool = False,
                           is_custom: bool = False):
         # Add a standard chip to the specified layout.
-        chip = QChip(text, mode=ChipMode.STANDARD,
-                     is_selected=selected, is_custom=is_custom)
+        chip = QChip(text,
+                     mode=ChipMode.STANDARD,
+                     is_selected=selected,
+                     is_custom=is_custom)
         chip.clicked.connect(lambda: self._on_move_chip(chip))
         chip.delete_requested.connect(self._on_delete_chip)
         target_layout.addWidget(chip)
@@ -594,11 +602,21 @@ class QChipSelect(QWidget):
                 self.available_layout.removeWidget(self.creator_chip)
                 self.available_layout.addWidget(chip)
                 self.available_layout.addWidget(self.creator_chip)
+            elif self.base_items and chip.text in self.base_items:
+                # Insert in sorted order among base items
+                insert_idx = 0
+                chip_idx = self.base_items.index(chip.text)
+                for item in self.__get_items(self.available_layout):
+                    if item in self.base_items:
+                        if self.base_items.index(item) < chip_idx:
+                            insert_idx += 1
+                self.available_layout.insertWidget(insert_idx, chip)
             else:
                 self.available_layout.addWidget(chip)
+                    
         # Emit signals
-        self.selectionChanged.emit(self.get_selected())
-        self.availableChanged.emit(self.get_available())
+        self.selectionChanged.emit(self.__get_items(self.selected_layout))
+        self.availableChanged.emit(self.__get_items(self.available_layout))
 
     @Slot()
     def _on_delete_chip(self, chip: QChip):

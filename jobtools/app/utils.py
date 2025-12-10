@@ -11,7 +11,7 @@ def get_config_dir() -> str:
     """ Get the path to the JobTools app configuration directory. """
     dir = os.path.join(os.path.dirname(__file__), "configs")
     if not os.path.exists(dir):
-        raise FileNotFoundError(f"Config directory not found at {dir}.")
+        os.makedirs(dir)
     return dir
 
 

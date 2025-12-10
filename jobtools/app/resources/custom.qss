@@ -28,3 +28,8 @@ QPushButton.help-button {{
     background-color: transparent;
     padding: 0px;
 }}
+
+.log-panel QTextEdit {{
+    font-family: "Roboto Mono", monospace;
+    font-size: 12px;
+}}

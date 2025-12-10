@@ -3,6 +3,7 @@ import json
 import os
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
 from .utils import get_config_dir
+from ..jobsdata import JobsData
 
 
 class TreeItem:
@@ -45,7 +46,7 @@ class TreeItem:
             return self._parent._child_items.index(self)
         return 0
     
-    def find_child_by_key(self, key: str):
+    def find_child(self, key: str):
         for child in self._child_items:
             if child.data(0) == key:
                 return child
@@ -54,6 +55,9 @@ class TreeItem:
 
 class ConfigModel(QAbstractItemModel):
     """ The central configuration model. """
+
+    jobs: JobsData
+    """ The JobsData instance managed by this model. """
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -85,7 +89,7 @@ class ConfigModel(QAbstractItemModel):
             The index of the root item for the registered page.
         """
         root = self._root_item
-        page_item = root.find_child_by_key(page_name)
+        page_item = root.find_child(page_name)
 
         if not page_item:
             self.beginInsertRows(QModelIndex(), root.child_count(), root.child_count())
@@ -110,7 +114,7 @@ class ConfigModel(QAbstractItemModel):
 
     def _merge_defaults(self, defaults: dict, parent_item: TreeItem):
         for key, value in defaults.items():
-            child_item = parent_item.find_child_by_key(key)
+            child_item = parent_item.find_child(key)
             if not child_item:
                 if isinstance(value, dict):
                     new_item = TreeItem([key, None], parent_item)
@@ -204,9 +208,7 @@ class ConfigModel(QAbstractItemModel):
         try:
             with open(filepath, 'r') as f:
                 data = json.load(f)
-            self.beginResetModel()
             self._recursive_load(data, self._root_item)
-            self.endResetModel()
         except FileNotFoundError:
             pass
 
@@ -227,7 +229,7 @@ class ConfigModel(QAbstractItemModel):
             # Not a dict -> backtrack
             return
         for key, value in data_dict.items():
-            child_item = parent_item.find_child_by_key(key)
+            child_item = parent_item.find_child(key)
             if not child_item:
                 # Key not found in model -> Create new item
                 if isinstance(value, dict):
@@ -242,3 +244,132 @@ class ConfigModel(QAbstractItemModel):
                     self._recursive_load(value, child_item)
                 else:
                     child_item.set_data(1, value)
+
+    def get_saved_config_names(self) -> list[str]:
+        """ Get a list of saved configuration names in the config directory. """
+        config_dir = get_config_dir()
+        config_names = []
+        for filename in os.listdir(config_dir):
+            if filename.endswith(".json") and filename != "persistent.json":
+                config_names.append(filename[:-5].strip().replace("_", " ").title())
+        return config_names
+    
+    def get_config_dict(self) -> dict:
+        """ Get the entire configuration as a dictionary. """
+        return self._recursive_dump(self._root_item)
+
+    @staticmethod
+    def run_collection(config: dict) -> JobsData:
+        """ Run the job collection process based on the current configuration. """
+        # Extract configurations
+        collect_cfg = config.get("collect", {})
+        sort_cfg = config.get("sort", {})
+        # Initialize JobsData
+        jobs = JobsData().from_csv(collect_cfg.get("data_source", ""))
+        jobs.logger.info("Starting job collection...")
+        # Run collection and sorting for each query
+        for query in collect_cfg.get("queries", []):
+            # Job collection
+            _ = jobs.collect(
+                site_name=collect_cfg.get("sites_selected", []),
+                search_term=query,
+                job_type=None,  # type: ignore
+                locations=collect_cfg.get("locations_selected", []),
+                results_wanted=10000, # TODO: Make arbitrarily large "maximum" value configurable
+                proxy=collect_cfg.get("proxy", ""),
+                hours_old=collect_cfg.get("hours_old", 0)
+            )
+            # Job sorting
+            keyword_value_map = {int(terms_key.split("_")[-1]): sort_cfg[terms_key]
+                                for terms_key in sort_cfg if terms_key.startswith("terms_selected_")}
+            location_order = sort_cfg.get("location_order_selected", [])
+            degree_values = sort_cfg.get("degree_values", [])
+            jobs.prioritize(
+                keyword_value_map,
+                location_order,
+                collect_cfg.get("sites_selected", []),
+                degree_values
+            )
+            # Remove duplicates
+            jobs.deduplicate()
+            # Save intermediate CSV
+            jobs.export_csv()
+        return jobs
+    
+    @staticmethod
+    def run_update_global(config: dict, jobs: JobsData) -> JobsData:
+        """ Update the global job data with newly collected jobs. """
+        # Extract configurations
+        collect_cfg = config.get("collect", {})
+        # Load global data and update with current jobs
+        g_jobs = JobsData().from_csv(source="global")
+        g_jobs.update(jobs)
+        # Prioritize and deduplicate global data after update
+        keyword_value_map = {int(terms_key.split("_")[-1]): config.get("sort", {}).get(terms_key, 0)
+                            for terms_key in config.get("sort", {}) if terms_key.startswith("terms_selected_")}
+        location_order = config.get("sort", {}).get("location_order_selected", [])
+        degree_values = config.get("sort", {}).get("degree_values", [])
+        g_jobs.prioritize(
+            keyword_value_map,
+            location_order,
+            collect_cfg.get("sites_selected", []),
+            degree_values
+        )
+        n_rem = g_jobs.deduplicate()
+        g_jobs.logger.info(f"Global > Removed {n_rem} duplicate job postings")
+        return g_jobs
+
+    @staticmethod
+    def run_filter(config: dict, jobs: JobsData) -> JobsData:
+        """ Run the job filtering process based on the current configuration. """
+        # Extract configurations
+        filter_cfg = config.get("filter", {})
+        # Job filtering
+        n_rem = 0
+        work_models = filter_cfg.get("work_models", [])
+        if "REMOTE" not in work_models:
+            n_rem += jobs.exclude("is_remote", True)
+        if "ONSITE" not in work_models:
+            n_rem += jobs.exclude("is_remote", False)
+        n_rem += jobs.exclude("job_type", filter_cfg.get("job_types", []))
+        n_rem += jobs.exclude("title", filter_cfg.get("title_exclude_selected", []))
+        n_rem += jobs.select("title", filter_cfg.get("title_require_selected", []))
+        n_rem += jobs.exclude("description", filter_cfg.get("descr_exclude_selected", []))
+        n_rem += jobs.select("description", filter_cfg.get("descr_require_selected", []))
+        jobs.logger.info(f"Filtered out {n_rem} jobs; {len(jobs)} remaining.")
+        return jobs
+
+    # TODO: Preliminary behavior; this will become its own embedded page later
+    @staticmethod
+    def run_export(config: dict, jobs: JobsData) -> str:
+        """ Export the collected and processed job data to an HTML file. """
+        # Extract configurations
+        sort_cfg = config.get("sort", {})
+        # Prepare scoring parameters
+        keyword_value_map = {int(terms_key.split("_")[-1]): sort_cfg[terms_key]
+                            for terms_key in sort_cfg if terms_key.startswith("terms_selected_")}
+        location_order = sort_cfg.get("location_order_selected", [])
+        degree_values = sort_cfg.get("degree_values", [])
+        # Save results to html
+        jobs["keyword_score"], jobs["keywords"] = jobs.keyword_score(keyword_value_map)
+        jobs["degree_score"] = jobs.degree_score(degree_values)
+        jobs["location_score"] = jobs.rank_order_score("state", location_order)
+        path = jobs.export_html(
+            headers={"date_posted": "Date",
+                     "state": "State",
+                     "company": "Company",
+                     "title": "Title",
+                     "has_ba": "BS",
+                     "has_ma": "MS",
+                     "has_phd": "PhD",
+                     "keywords": "Keywords",
+                     "job_url": "URL"},
+            keys={"date_posted": "date_posted",
+                  "state": "location_score",
+                  "company": "company",
+                  "title": "title",
+                  "has_ba": "degree_score",
+                  "keywords": "keyword_score",
+                  "job_url": "site"},
+        )
+        return path

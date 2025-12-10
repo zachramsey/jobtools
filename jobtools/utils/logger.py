@@ -1,7 +1,7 @@
 import logging
 
 
-class JTLogger:
+class JDLogger:
     _formatter = logging.Formatter(
         "{asctime} | {name:^8} | {levelname:^8} | {message}",
         datefmt="%H:%M:%S",
@@ -9,11 +9,11 @@ class JTLogger:
     )
 
     def __init__(self):
-        """ Get the JobTools logger instance. """
-        self.logger = logging.getLogger("JobTools")
+        """ Get the JobData logger instance. """
+        self.logger = logging.getLogger("JobData")
 
     def configure(self, level):
-        """ Configure the JTLogger instance. """
+        """ Configure the JDLogger instance. """
         self.set_level(level)
         self.addHandler(logging.StreamHandler())
         self.logger.propagate = False
@@ -30,6 +30,10 @@ class JTLogger:
         """ Log a warning-level message. """
         self.logger.warning(f"{message}")
 
+    def error(self, message):
+        """ Log an error-level message. """
+        self.logger.error(f"{message}")
+
     def set_level(self, level):
         """ Set the logging level. """
         levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -38,7 +42,7 @@ class JTLogger:
 
     def addHandler(self, handler: logging.Handler):
         """ Add the specified handler to the
-        JobTools logger and set its formatter. """
+        JobData logger and set its formatter. """
         handler.setFormatter(self._formatter)
         self.logger.addHandler(handler)
 
@@ -53,9 +57,9 @@ class JTLogger:
 
     @staticmethod
     def conform_format(logger_name: str):
-        """ Set JTLogger format for an existing logger by name. """
+        """ Set JDLogger format for an existing logger by name. """
         logger = logging.getLogger(logger_name)
         for h in logger.handlers:
             if isinstance(h, logging.StreamHandler):
-                h.setFormatter(JTLogger._formatter)
+                h.setFormatter(JDLogger._formatter)
                 break

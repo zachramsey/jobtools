@@ -31,7 +31,7 @@ sorting values to disfavor those listings."""
 class DegreeValueSelector(QWidget):
     """ Widget for selecting degree values. """
 
-    valuesChanged = Signal(tuple[int, int, int])
+    valuesChanged = Signal(int, int, int)
     """ Signal emitted when the degree values change. """
 
     def __init__(self):
@@ -83,7 +83,7 @@ class DegreeValueSelector(QWidget):
     @Slot()
     def _on_change(self):
         """ Emit current degree values when changed. """
-        self.valuesChanged.emit(self.get_values())
+        self.valuesChanged.emit(*self.get_values())
 
     def setup_spin_box(self, label: str, level: int) -> QSpinBox:
         """ Create and configure a spin box for degree values. """
@@ -163,11 +163,12 @@ class SortPage(QWidget):
 
         # Location order selection
         self.layout().addWidget(QHeader("Location Order", tooltip=LO_TT))
-        state_abbr = [abbr.upper() for abbr in NAME_TO_ABBR.values()]
-        self.lo_selector = QChipSelect(base_items=state_abbr,
+        available = [abbr.upper() for abbr in NAME_TO_ABBR.values()]
+        self.lo_selector = QChipSelect(base_items=available,
                                        enable_creator=False)
         self.layout().addWidget(self.lo_selector)
-        self.defaults["location_order"] = []
+        self.defaults["location_order_selected"] = []
+        self.defaults["location_order_available"] = available
 
         # Term emphasis selections
         levels = {3: ("High Emphasis Terms (+3)", HE_TT),
@@ -199,9 +200,11 @@ class SortPage(QWidget):
 
         # Connect view to data model
         self.dv_selector.valuesChanged.connect(
-            lambda T: self._update_model("degree_values", T))
+            lambda ba, ma, phd: self._update_model("degree_values", (ba, ma, phd)))
         self.lo_selector.selectionChanged.connect(
-            lambda L: self._update_model("location_order", L))
+            lambda L: self._update_model("location_order_selected", L))
+        self.lo_selector.availableChanged.connect(
+            lambda L: self._update_model("location_order_available", L))
         for value, selector in self.te_selectors.items():
             selector.selectionChanged.connect(
                 lambda L, v=value: self._update_model(f"terms_selected_{str(v)}", L))
@@ -235,18 +238,36 @@ class SortPage(QWidget):
     def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Degree values
-        val = self.__get_value("degree_values", top_left)
-        if self.dv_selector.get_values() != val:
-            self.dv_selector.set_values(*val)
+        idx = self._idcs.get("degree_values")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["degree_values"]
+            if self.dv_selector.get_values() != val:
+                self.dv_selector.set_values(*val)
         # Location order
-        selection = self.__get_value("location_order", top_left)
-        if self.lo_selector.get_selected() != selection:
-            self.lo_selector.set_selected(selection)
+        idx = self._idcs.get("location_order_selected")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["location_order_selected"]
+            if self.lo_selector.get_selected() != val:
+                self.lo_selector.set_selected(val)
+        idx = self._idcs.get("location_order_available")
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = val if val is not None else self.defaults["location_order_available"]
+            if self.lo_selector.get_available() != val:
+                self.lo_selector.set_available(val)
         # Term emphasis selectors
         for value, selector in self.te_selectors.items():
-            selected = self.__get_value(f"terms_selected_{str(value)}", top_left)
-            if selector.get_selected() != selected:
-                selector.set_selected(selected)
-            available = self.__get_value(f"terms_available_{str(value)}", top_left)
-            if selector.get_available() != available:
-                selector.set_available(available)
+            idx = self._idcs.get(f"terms_selected_{str(value)}")
+            if idx is not None and (not top_left.isValid() or top_left == idx):
+                val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+                val = val if val is not None else self.defaults[f"terms_selected_{str(value)}"]
+                if selector.get_selected() != val:
+                    selector.set_selected(val)
+            idx = self._idcs.get(f"terms_available_{str(value)}")
+            if idx is not None and (not top_left.isValid() or top_left == idx):
+                val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
+                val = val if val is not None else self.defaults[f"terms_available_{str(value)}"]
+                if selector.get_available() != val:
+                    selector.set_available(val)
