@@ -2,14 +2,26 @@ import datetime as dt
 from jobspy import scrape_jobs                      # type: ignore
 from markdownify import MarkdownConverter           # type: ignore
 from markdownify import ATX, SPACES, UNDERSCORE     # type: ignore
+import multiprocessing as mp
 import os
 import pandas as pd
+import threading
+import time
 from typing import Callable
 import re
 
 from . import HTMLBuilder
 from .utils.logger import JDLogger
 from .utils import parse_degrees, parse_location, build_regex
+
+
+def _scrape_jobs_worker(queue: mp.Queue, kwargs: dict):
+    """ Worker for calling scrape_jobs in a separate process. """
+    try:
+        jobs = scrape_jobs(**kwargs)
+        queue.put(jobs)
+    except Exception as e:
+        queue.put(e)
 
 
 class JobsData:
@@ -202,7 +214,8 @@ class JobsData:
                 locations: list[str],
                 results_wanted: int,
                 proxy: str,
-                hours_old: int) -> int:
+                hours_old: int,
+                cancel_event: threading.Event | None = None) -> int:
         """ Collect job postings.
 
         Parameters
@@ -241,19 +254,52 @@ class JobsData:
         `"city"`, `"state"`, `"has_ba"`,
         `"has_ma"`, `"has_phd"`
         """
+        if cancel_event is None:
+            cancel_check = lambda: False  # noqa: E731
+        else:
+            cancel_check = cancel_event.is_set
+        # Collect jobs for each location
         n_init = len(self._df)
         for location in locations:
+            if cancel_check():
+                self.logger.info("Job collection cancelled before next location.")
+                break
             # Scrape jobs for this location and search terms
-            jobs = scrape_jobs(site_name=site_name,
-                               search_term=search_term,
-                               location=location,
-                               job_type=job_type,
-                               results_wanted=results_wanted,
-                               proxies=proxy,
-                               description_format="html",
-                               linkedin_fetch_description=True,
-                               hours_old=hours_old,
-                               enforce_annual_salary=True)
+            kwargs = dict(site_name=site_name,
+                          search_term=search_term,
+                          location=location,
+                          job_type=job_type,
+                          results_wanted=results_wanted,
+                          proxies=proxy,
+                          description_format="html",
+                          linkedin_fetch_description=True,
+                          hours_old=hours_old,
+                          enforce_annual_salary=True)
+            # Set up multiprocessing queue and process
+            q: mp.Queue = mp.Queue()
+            p = mp.Process(target=_scrape_jobs_worker, args=(q, kwargs))
+            p.start()
+            # Monitor process for cancellation
+            while p.is_alive():
+                if cancel_check():
+                    self.logger.info("Job collection cancelled: terminating worker process.")
+                    p.terminate()
+                    p.join()
+                    break
+                time.sleep(0.1)     # Avoid busy waiting
+            # Get results from queue
+            jobs = pd.DataFrame()
+            try:
+                result = q.get_nowait()
+                if isinstance(result, Exception):
+                    self.logger.warning(f"Collection worker raised an exception: {result}")
+                else:
+                    jobs = result
+            except Exception as e:
+                self.logger.warning(f"Failed to get results from collection worker: {e}")
+            # Cancellation mid-scrape
+            if cancel_check():
+                break
             # Skip if no jobs found
             if len(jobs) > 0:
                 # Filter out jobs older than hours_old

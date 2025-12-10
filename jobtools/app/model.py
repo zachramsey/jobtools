@@ -2,6 +2,7 @@
 import json
 import os
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
+import threading
 from .utils import get_config_dir
 from ..jobsdata import JobsData
 
@@ -259,7 +260,8 @@ class ConfigModel(QAbstractItemModel):
         return self._recursive_dump(self._root_item)
 
     @staticmethod
-    def run_collection(config: dict) -> JobsData:
+    def run_collection(config: dict,
+                       cancel_event: threading.Event|None = None) -> JobsData:
         """ Run the job collection process based on the current configuration. """
         # Extract configurations
         collect_cfg = config.get("collect", {})
@@ -277,8 +279,13 @@ class ConfigModel(QAbstractItemModel):
                 locations=collect_cfg.get("locations_selected", []),
                 results_wanted=10000, # TODO: Make arbitrarily large "maximum" value configurable
                 proxy=collect_cfg.get("proxy", ""),
-                hours_old=collect_cfg.get("hours_old", 0)
+                hours_old=collect_cfg.get("hours_old", 0),
+                cancel_event=cancel_event
             )
+            # Check for cancellation
+            if cancel_event and cancel_event.is_set():
+                jobs.logger.info("Job collection cancelled by user.")
+                break
             # Job sorting
             keyword_value_map = {int(terms_key.split("_")[-1]): sort_cfg[terms_key]
                                 for terms_key in sort_cfg if terms_key.startswith("terms_selected_")}
