@@ -163,39 +163,39 @@ class CollectPage(QWidget):
 
         # Connect view to data model
         self.p_editor.textChanged.connect(
-            lambda t: self._update_model("proxy", t))
+            lambda t: self._update_config("proxy", t))
         self.ds_selector.sourceChanged.connect(
-            lambda t: self._update_model("data_source", t))
+            lambda t: self._update_config("data_source", t))
         self.s_selector.selectionChanged.connect(
-            lambda L: self._update_model("sites_selected", L))
+            lambda L: self._update_config("sites_selected", L))
         self.s_selector.availableChanged.connect(
-            lambda L: self._update_model("sites_available", L))
+            lambda L: self._update_config("sites_available", L))
         self.l_editor.selectionChanged.connect(
-            lambda L: self._update_model("locations_selected", L))
+            lambda L: self._update_config("locations_selected", L))
         self.l_editor.availableChanged.connect(
-            lambda L: self._update_model("locations_available", L))
+            lambda L: self._update_config("locations_available", L))
         self.q_editor.itemsChanged.connect(
-            lambda L: self._update_model("queries", L))
+            lambda L: self._update_config("queries", L))
         self.h_editor.valueChanged.connect(
-            lambda n: self._update_model("hours_old", n))
+            lambda n: self._update_config("hours_old", n))
         
         # Connect model to view updates
-        self._config_model.dataChanged.connect(self._data_changed)
+        self._config_model.dataChanged.connect(self._on_config_changed)
 
         # Trigger initial data load
-        self._data_changed(QModelIndex(), QModelIndex())
+        self._on_config_changed(QModelIndex(), QModelIndex())
 
     def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
         return super().layout() # type: ignore
 
-    def _update_model(self, key: str, value):
+    def _update_config(self, key: str, value):
         """ Update model data from view changes. """
         if key in self._idcs:
             self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
-        """ Helper to get model value for a key if in changed range. """
+        """ Get value from model for a specific key. """
         idx = self._idcs.get(key)
         if idx is not None and (not top_left.isValid() or top_left == idx):
             val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
@@ -205,7 +205,7 @@ class CollectPage(QWidget):
         return None
 
     @Slot(QModelIndex, QModelIndex)
-    def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
+    def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Proxy
         val = self.__get_value("proxy", top_left)

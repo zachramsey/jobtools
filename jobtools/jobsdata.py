@@ -132,7 +132,7 @@ class JobsData:
             *Options:*
             - *`""` -> no existing data (Default)*
             - *`"latest"` -> load most recent output directory*
-            - *`"global"` -> load global jobs_data.csv*
+            - *`"archive"` -> load archive jobs_data.csv*
             - *`"{yyyymmdd}/{HHMM}"` -> load specified subdirectory*
 
         Returns
@@ -150,9 +150,9 @@ class JobsData:
         path = ""
         if source:
             # Determine full path based on source
-            if source == "global":
+            if source == "archive":
                 # Load output/jobs_data.csv
-                path = os.path.join(cls._out_path, "global", "jobs_data.csv")
+                path = os.path.join(cls._out_path, "archive", "jobs_data.csv")
             elif source == "latest":
                 # Find most recent day-wise subdirectory
                 day_dirs = []
@@ -599,7 +599,7 @@ class JobsData:
             os.makedirs(path)
         # Determine output file path
         file = os.path.join(path, file_name)
-        # if not path.startswith(os.path.join(self._out_path, "global")):
+        # if not path.startswith(os.path.join(self._out_path, "archive")):
         # Make sure we don't overwrite existing HTML results
         if extension == "html":
             i = 0
@@ -608,13 +608,18 @@ class JobsData:
                 file = os.path.join(path, f"{name}_{i}.{extension}")
         return file
     
-    def export_csv(self, path: str = ""):
+    def export_csv(self, path: str = "") -> str:
         """ Save collected job postings to CSV file.
 
         Parameters
         ----------
         path : str, optional
             Output directory to save data; if empty, uses derived path.
+
+        Returns
+        -------
+        str
+            Path to the saved CSV file.
         """
         # Validate output path
         file = self._validate_path(path, "jobs_data.csv")
@@ -623,7 +628,8 @@ class JobsData:
         data = self._df.drop(columns=new_cols, errors='ignore')
         # Save DataFrame to CSV
         data.to_csv(file, index=False)
-        JobsData._logger.info(f"Saved {len(self._df)} jobs to {file}")            
+        JobsData._logger.info(f"Saved {len(self._df)} jobs to {file}")
+        return file
                 
     def export_html(self,
                headers: dict[str, str] = {

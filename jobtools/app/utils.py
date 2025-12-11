@@ -7,21 +7,68 @@ from qt_material import get_theme   # type: ignore
 
 
 @cache
-def get_config_dir() -> str:
-    """ Get the path to the JobTools app configuration directory. """
-    dir = os.path.join(os.path.dirname(__file__), "configs")
+def get_proj_dir() -> str:
+    """ Get the path to the JobTools app directory. """
+    dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
     if not os.path.exists(dir):
-        os.makedirs(dir)
+        raise FileNotFoundError(f"App directory not found at {dir}.")
     return dir
 
 
 @cache
 def get_resource_dir() -> str:
     """ Get the path to the JobTools app resources directory. """
-    dir = os.path.join(os.path.dirname(__file__), "resources")
+    dir = os.path.join(get_proj_dir(), "app", "resources")
     if not os.path.exists(dir):
         raise FileNotFoundError(f"Resources directory not found at {dir}.")
     return dir
+
+
+@cache
+def get_config_dir() -> str:
+    """ Get the path to the JobTools app configuration directory. """
+    dir = os.path.join(get_proj_dir(), "app", "configs")
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    return dir
+
+
+@cache
+def get_data_dir() -> str:
+    """ Get the path to the JobTools app data directory. """
+    dir = os.path.join(get_proj_dir(), "data")
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    return dir
+
+
+def get_data_sources() -> dict[str, str]:
+    """ Get available data sources.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping of data source labels to their file paths.
+    """
+    data_dir = get_data_dir()
+    sources = {}
+    for date in os.listdir(data_dir):
+        if date == "archive":
+            sources["Archive"] = os.path.join(data_dir, date)
+            continue
+        if not date.isdigit() or len(date) != 8:
+            continue
+        for time in os.listdir(os.path.join(data_dir, date)):
+            for file in os.listdir(os.path.join(data_dir, date, time)):
+                if file.endswith(".csv"):
+                    year, month, day = date[0:4], date[4:6], date[6:8]
+                    hour, minute = time[0:2], time[2:4]
+                    source_name = f"{year}-{month}-{day} {hour}:{minute}"
+                    source_path = os.path.join(data_dir, date, time, file)
+                    sources[source_name] = source_path
+    # Sort sources in reverse chronological order
+    sources = dict(sorted(sources.items(), reverse=True))
+    return sources
 
 
 @cache

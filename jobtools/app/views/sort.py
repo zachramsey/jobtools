@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QRadioButton, Q
 from PySide6.QtCore import QModelIndex, Qt, Slot, Signal
 from ..custom_widgets import QHeader, QChipSelect
 from ..models.config_model import ConfigModel
+from ..models.sort_filter_model import SortFilterModel
 from ...utils.location_parser import NAME_TO_ABBR
 
 
@@ -147,10 +148,11 @@ class DegreeValueSelector(QWidget):
     
 
 class SortPage(QWidget):
-    def __init__(self, model: ConfigModel):
+    def __init__(self, config_model: ConfigModel, sort_model: SortFilterModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
-        self._cfg_model = model
+        self._config_model = config_model
+        self._sort_model = sort_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
 
@@ -188,73 +190,83 @@ class SortPage(QWidget):
         # Push content to top
         self.layout().addStretch()
         
-        # Register page with model
-        root_index = self._cfg_model.register_page("sort", self.defaults)
+        # Register page with config model
+        root_index = self._config_model.register_page("sort", self.defaults)
 
-        # Map property keys to model indices
-        for row in range(self._cfg_model.rowCount(root_index)):
-            idx = self._cfg_model.index(row, 0, root_index)
-            key = self._cfg_model.data(idx)
-            val_idx = self._cfg_model.index(row, 1, root_index)
+        # Map property keys to config model indices
+        for row in range(self._config_model.rowCount(root_index)):
+            idx = self._config_model.index(row, 0, root_index)
+            key = self._config_model.data(idx)
+            val_idx = self._config_model.index(row, 1, root_index)
             self._idcs[key] = val_idx
 
-        # Connect view to data model
+        # Connect view to data config model
         self.dv_selector.valuesChanged.connect(
-            lambda ba, ma, phd: self._update_model("degree_values", (ba, ma, phd)))
+            lambda ba, ma, phd: self._update_config("degree_values", (ba, ma, phd)))
         self.lo_selector.selectionChanged.connect(
-            lambda L: self._update_model("location_order_selected", L))
+            lambda L: self._update_config("location_order_selected", L))
         self.lo_selector.availableChanged.connect(
-            lambda L: self._update_model("location_order_available", L))
+            lambda L: self._update_config("location_order_available", L))
         for value, selector in self.te_selectors.items():
             selector.selectionChanged.connect(
-                lambda L, v=value: self._update_model(f"terms_selected_{str(v)}", L))
+                lambda L, v=value: self._update_config(f"terms_selected_{str(v)}", L))
             selector.availableChanged.connect(
-                lambda L, v=value: self._update_model(f"terms_available_{str(v)}", L))
+                lambda L, v=value: self._update_config(f"terms_available_{str(v)}", L))
         
-        # Connect model to view updates
-        self._cfg_model.dataChanged.connect(self._data_changed)
+        # Connect config model to view updates
+        self._config_model.dataChanged.connect(self._on_config_changed)
 
-        # Trigger initial data load
-        self._data_changed(QModelIndex(), QModelIndex())
+        # Trigger initial config load
+        self._on_config_changed(QModelIndex(), QModelIndex())
 
     def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
         return super().layout() # type: ignore
 
-    def _update_model(self, key: str, value):
-        """ Update model data from view changes. """
+    def _update_config(self, key: str, value):
+        """ Update config model from view changes. """
         if key in self._idcs:
-            self._cfg_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+            self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
-        """ Helper to get model value for a key if in changed range. """
+        """ Get value from config model for a specific key. """
         idx = self._idcs.get(key)
         if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._cfg_model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
             if val is None:
                 val = self.defaults[key]
             return val
         return None
 
     @Slot(QModelIndex, QModelIndex)
-    def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
-        """ Update view when model data changes. """
+    def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
+        """ Update view when config model changes. """
+        update = False
         # Degree values
         val = self.__get_value("degree_values", top_left)
         if val is not None and val != self.dv_selector.get_values():
             self.dv_selector.set_values(*val)
+            self._sort_model.update_degree_score(val)
+            update = True
         # Location order
         val = self.__get_value("location_order_selected", top_left)
         if val is not None and val != self.lo_selector.get_selected():
             self.lo_selector.set_selected(val)
+            self._sort_model.update_location_score(val)
+            update = True
         val = self.__get_value("location_order_available", top_left)
         if val is not None and val != self.lo_selector.get_available():
             self.lo_selector.set_available(val)
         # Term emphasis selectors
+        kw_val_map = {}
         for value, selector in self.te_selectors.items():
             val = self.__get_value(f"terms_selected_{str(value)}", top_left)
             if val is not None and val != selector.get_selected():
                 selector.set_selected(val)
+                kw_val_map[value] = val
+                update = True
             val = self.__get_value(f"terms_available_{str(value)}", top_left)
             if val is not None and val != selector.get_available():
                 selector.set_available(val)
+        if update:
+            self._sort_model.invalidateFilter()

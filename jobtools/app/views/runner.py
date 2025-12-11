@@ -1,13 +1,10 @@
 import os
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox
-from PySide6.QtCore import Qt, QModelIndex, QObject, Signal, Slot, QThread, QUrl
-from PySide6.QtGui import QDesktopServices
-import threading
-import traceback
+from PySide6.QtCore import Qt, QModelIndex, Slot
 from ..custom_widgets import QHeader
 from ..models.config_model import ConfigModel
+from ..models.data_model import DataModel
 from ..utils import get_config_dir
-from ...utils.logger import JDLogger
 
 
 SC_TT = """"""
@@ -15,43 +12,16 @@ SC_TT = """"""
 LC_TT = """"""
 
 
-class CollectionWorker(QObject):
-    """ Worker for running job data collection in a separate thread. """
-
-    finished = Signal(str)
-    error = Signal(str)
-
-    def __init__(self, config: dict, cancel_event: threading.Event | None = None):
-        super().__init__()
-        self._config = config
-        self._cancel_event = cancel_event
-
-    @Slot()
-    def run(self):
-        """ Run the job data collection process. """
-        try:
-            jobs = ConfigModel.run_collection(self._config,
-                                              cancel_event=self._cancel_event)
-            if self._cancel_event and self._cancel_event.is_set():
-                # Skip further processing if cancelled
-                self.finished.emit("")
-                return
-            jobs = ConfigModel.run_filter(self._config, jobs)
-            html_path = ConfigModel.run_export(self._config, jobs)
-            self.finished.emit(html_path)
-        except Exception:
-            self.error.emit(traceback.format_exc())
-
-
 class RunnerPage(QWidget):
     """ Page for running JobTools operations. """
 
-    def __init__(self, model: ConfigModel):
+    _data_model: DataModel
+    """ Controller for job data operations. """
+
+    def __init__(self, config_model: ConfigModel):
         super().__init__()
-        self._model = model
+        self._config_model = config_model
         self._config_dir = get_config_dir()
-        self._worker_thread = None
-        self._cancel_event = None
         self.setLayout(QVBoxLayout(self))
 
         # Load configuration
@@ -59,7 +29,7 @@ class RunnerPage(QWidget):
         load_layout = QHBoxLayout()
         self.config_select = QComboBox()
         self.config_select.setFixedWidth(300)
-        self.config_select.addItems([""]+self._model.get_saved_config_names())
+        self.config_select.addItems([""]+self._config_model.get_saved_config_names())
         load_layout.addWidget(self.config_select)
         self.config_load = QPushButton("Load")
         self.config_load.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -104,8 +74,8 @@ class RunnerPage(QWidget):
             return
         config_name = config_name.replace(" ", "_").lower()
         config_path = os.path.join(self._config_dir, f"{config_name}.json")
-        self._model.load_from_file(config_path)
-        self._model.dataChanged.emit(QModelIndex(), QModelIndex())
+        self._config_model.load_from_file(config_path)
+        self._config_model.dataChanged.emit(QModelIndex(), QModelIndex())
         # Update config edit box
         self.config_edit.setText(config_name)
 
@@ -117,11 +87,11 @@ class RunnerPage(QWidget):
             return
         config_name = config_name.replace(" ", "_").lower()
         config_path = os.path.join(self._config_dir, f"{config_name}.json")
-        self._model.save_to_file(config_path)
+        self._config_model.save_to_file(config_path)
         # Update config selector
         temp = self.config_select.currentText()
         self.config_select.clear()
-        self.config_select.addItems([""]+self._model.get_saved_config_names())
+        self.config_select.addItems([""]+self._config_model.get_saved_config_names())
         self.config_select.setCurrentText(temp)
 
     @Slot()
@@ -133,53 +103,37 @@ class RunnerPage(QWidget):
             self.run.setProperty("class", "danger")
             self.run.style().unpolish(self.run)
             self.run.style().polish(self.run)
-            # Set up worker and thread
-            self._cancel_event = threading.Event()
-            self._worker_thread = QThread()
-            self.worker = CollectionWorker(self._model.get_config_dict(),
-                                        cancel_event=self._cancel_event)
-            self.worker.moveToThread(self._worker_thread)
-            # Connect signals
-            self._worker_thread.started.connect(self.worker.run)
-            self.worker.finished.connect(self._worker_thread.quit)
-            self.worker.finished.connect(self.worker.deleteLater)
-            self._worker_thread.finished.connect(self._worker_thread.deleteLater)
-            self.worker.finished.connect(self._on_collection_finished)
-            self.worker.error.connect(self._on_collection_error)
+            # Setup data collection worker
+            self._data_model = DataModel.setup_collection(self._config_model.get_config_dict())
+            # Connect worker result signals
+            self._data_model.worker.finished.connect(self._on_collection_finished)
+            self._data_model.worker.error.connect(self._on_collection_error)
             # Start thread
-            self._worker_thread.start()
+            self._data_model.worker_thread.start()
         else:
-            if not (self._worker_thread and self._worker_thread.isRunning()):
+            if not (self._data_model.worker_thread and self._data_model.worker_thread.isRunning()):
                 # Nothing to cancel
                 return
             # Signal cancellation
-            if self._cancel_event:
-                self._cancel_event.set()
+            if self._data_model.cancel_event:
+                self._data_model.cancel_event.set()
             self.run.setText("Canceling...")
             self.run.setEnabled(False)
 
     @Slot(str)
-    def _on_collection_finished(self, html_path: str):
+    def _on_collection_finished(self, csv_path: str):
         """ Handle completion of job data collection. """
         self.run.setText("Collect Jobs")
         self.run.setProperty("class", "")
         self.run.style().unpolish(self.run)
         self.run.style().polish(self.run)
         self.run.setEnabled(True)
-        self._cancel_event = None
-        # Open the generated HTML file
-        if html_path and os.path.isfile(html_path):
-            abs_path = os.path.abspath(html_path)
-            url = QUrl.fromLocalFile(abs_path)
-            if not QDesktopServices.openUrl(url):
-                JDLogger().error(f"Failed to open the HTML file: {abs_path}")
-        else:
-            JDLogger().warning("No HTML file was generated.")
+        self._data_model.clear_cancel_event()
 
     @Slot(str)
     def _on_collection_error(self, error_msg: str):
         """ Handle errors during job data collection. """
         self.run.setEnabled(True)
         self.run.setText("Collect Jobs")
-        self._cancel_event = None
+        self._data_model.clear_cancel_event()
         raise RuntimeError(f"Job data collection failed: {error_msg}")

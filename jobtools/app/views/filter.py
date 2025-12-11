@@ -3,6 +3,7 @@ from PySide6.QtCore import QModelIndex, Qt, Slot
 from jobspy.model import JobType    # type: ignore
 from ..custom_widgets import QHeader, QChipSelect, QCheckBoxSelect
 from ..models.config_model import ConfigModel
+from ..models.sort_filter_model import SortFilterModel
 
 
 WM_TT = """Select which work models to include in results.\n
@@ -35,10 +36,11 @@ Accepts single words, multi-word phrases, and regular expressions."""
     
 
 class FilterPage(QWidget):
-    def __init__(self, config_model: ConfigModel):
+    def __init__(self, config_model: ConfigModel, filter_model: SortFilterModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
+        self._filter_model = filter_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
 
@@ -101,43 +103,43 @@ class FilterPage(QWidget):
 
         # Connect view to data model
         self.wm_selector.selectionChanged.connect(
-            lambda L: self._update_model("work_models", L))
+            lambda L: self._update_config("work_models", L))
         self.jt_selector.selectionChanged.connect(
-            lambda L: self._update_model("job_types", L))
+            lambda L: self._update_config("job_types", L))
         self.te_editor.selectionChanged.connect(
-            lambda L: self._update_model("title_exclude_selected", L))
+            lambda L: self._update_config("title_exclude_selected", L))
         self.te_editor.availableChanged.connect(
-            lambda L: self._update_model("title_exclude_available", L))
+            lambda L: self._update_config("title_exclude_available", L))
         self.tr_editor.selectionChanged.connect(
-            lambda L: self._update_model("title_require_selected", L))
+            lambda L: self._update_config("title_require_selected", L))
         self.tr_editor.availableChanged.connect(
-            lambda L: self._update_model("title_require_available", L))
+            lambda L: self._update_config("title_require_available", L))
         self.de_editor.selectionChanged.connect(
-            lambda L: self._update_model("descr_exclude_selected", L))
+            lambda L: self._update_config("descr_exclude_selected", L))
         self.de_editor.availableChanged.connect(
-            lambda L: self._update_model("descr_exclude_available", L))
+            lambda L: self._update_config("descr_exclude_available", L))
         self.dr_editor.selectionChanged.connect(
-            lambda L: self._update_model("descr_require_selected", L))
+            lambda L: self._update_config("descr_require_selected", L))
         self.dr_editor.availableChanged.connect(
-            lambda L: self._update_model("descr_require_available", L))
+            lambda L: self._update_config("descr_require_available", L))
         
         # Connect model to view updates
-        self._config_model.dataChanged.connect(self._data_changed)
+        self._config_model.dataChanged.connect(self._on_config_changed)
 
         # Trigger initial data load
-        self._data_changed(QModelIndex(), QModelIndex())
+        self._on_config_changed(QModelIndex(), QModelIndex())
 
     def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
         return super().layout() # type: ignore
 
-    def _update_model(self, key: str, value):
+    def _update_config(self, key: str, value):
         """ Update model data from view changes. """
         if key in self._idcs:
             self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
-        """ Helper to get model value for a key if in changed range. """
+        """ Get value from model for a specific key. """
         idx = self._idcs.get(key)
         if idx is not None and (not top_left.isValid() or top_left == idx):
             val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
@@ -147,20 +149,27 @@ class FilterPage(QWidget):
         return None
     
     @Slot(QModelIndex, QModelIndex)
-    def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
+    def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
+        update = False
         # Work model selector
         val = self.__get_value("work_models", top_left)
         if val is not None and val != self.wm_selector.get_selected():
             self.wm_selector.set_selected(val)
+            self._filter_model.setFilter("is_remote", "exact", [wm == "Remote" or wm != "Onsite" for wm in val])
+            update = True
         # Job type selector
         val = self.__get_value("job_types", top_left)
         if val is not None and val != self.jt_selector.get_selected():
             self.jt_selector.set_selected(val)
+            self._filter_model.setFilter("job_type", "exact", val)
+            update = True
         # Title exclude editor
         val = self.__get_value("title_exclude_selected", top_left)
         if val is not None and val != self.te_editor.get_selected():
             self.te_editor.set_selected(val)
+            self._filter_model.setFilter("title", "regex", val)
+            update = True
         val = self.__get_value("title_exclude_available", top_left)
         if val is not None and val != self.te_editor.get_available():
             self.te_editor.set_available(val)
@@ -168,6 +177,8 @@ class FilterPage(QWidget):
         val = self.__get_value("title_require_selected", top_left)
         if val is not None and val != self.tr_editor.get_selected():
             self.tr_editor.set_selected(val)
+            self._filter_model.setFilter("title", "regex", val, invert=True)
+            update = True
         val = self.__get_value("title_require_available", top_left)
         if val is not None and val != self.tr_editor.get_available():
             self.tr_editor.set_available(val)
@@ -175,6 +186,8 @@ class FilterPage(QWidget):
         val = self.__get_value("descr_exclude_selected", top_left)
         if val is not None and val != self.de_editor.get_selected():
             self.de_editor.set_selected(val)
+            self._filter_model.setFilter("description", "regex", val)
+            update = True
         val = self.__get_value("descr_exclude_available", top_left)
         if val is not None and val != self.de_editor.get_available():
             self.de_editor.set_available(val)
@@ -182,6 +195,10 @@ class FilterPage(QWidget):
         val = self.__get_value("descr_require_selected", top_left)
         if val is not None and val != self.dr_editor.get_selected():
             self.dr_editor.set_selected(val)
+            self._filter_model.setFilter("description", "regex", val, invert=True)
+            update = True
         val = self.__get_value("descr_require_available", top_left)
         if val is not None and val != self.dr_editor.get_available():
             self.dr_editor.set_available(val)
+        if update:
+            self._filter_model.invalidateFilter()
