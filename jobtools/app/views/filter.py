@@ -35,10 +35,10 @@ Accepts single words, multi-word phrases, and regular expressions."""
     
 
 class FilterPage(QWidget):
-    def __init__(self, model: ConfigModel):
+    def __init__(self, config_model: ConfigModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
-        self._model = model
+        self._config_model = config_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
 
@@ -90,13 +90,13 @@ class FilterPage(QWidget):
         self.layout().addStretch()
 
         # Register page with model
-        root_index = self._model.register_page("filter", self.defaults)
+        root_index = self._config_model.register_page("filter", self.defaults)
 
         # Map property keys to model indices
-        for row in range(self._model.rowCount(root_index)):
-            idx = self._model.index(row, 0, root_index)
-            key = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val_idx = self._model.index(row, 1, root_index)
+        for row in range(self._config_model.rowCount(root_index)):
+            idx = self._config_model.index(row, 0, root_index)
+            key = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val_idx = self._config_model.index(row, 1, root_index)
             self._idcs[key] = val_idx
 
         # Connect view to data model
@@ -122,7 +122,7 @@ class FilterPage(QWidget):
             lambda L: self._update_model("descr_require_available", L))
         
         # Connect model to view updates
-        self._model.dataChanged.connect(self._data_changed)
+        self._config_model.dataChanged.connect(self._data_changed)
 
         # Trigger initial data load
         self._data_changed(QModelIndex(), QModelIndex())
@@ -134,82 +134,54 @@ class FilterPage(QWidget):
     def _update_model(self, key: str, value):
         """ Update model data from view changes. """
         if key in self._idcs:
-            self._model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+            self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
         """ Helper to get model value for a key if in changed range. """
         idx = self._idcs.get(key)
-        if idx is None or (top_left.isValid() and top_left != idx):
-            return self.defaults[key]
-        val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-        return val if val is not None else self.defaults[key]
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
+            if val is None:
+                val = self.defaults[key]
+            return val
+        return None
     
     @Slot(QModelIndex, QModelIndex)
     def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Work model selector
-        idx = self._idcs.get("work_models")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["work_models"]
-            if self.wm_selector.get_selected() != val:
-                self.wm_selector.set_selected(val)
+        val = self.__get_value("work_models", top_left)
+        if val is not None and val != self.wm_selector.get_selected():
+            self.wm_selector.set_selected(val)
         # Job type selector
-        idx = self._idcs.get("job_types")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["job_types"]
-            if self.jt_selector.get_selected() != val:
-                self.jt_selector.set_selected(val)
+        val = self.__get_value("job_types", top_left)
+        if val is not None and val != self.jt_selector.get_selected():
+            self.jt_selector.set_selected(val)
         # Title exclude editor
-        idx = self._idcs.get("title_exclude_selected")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["title_exclude_selected"]
-            if self.te_editor.get_selected() != val:
-                self.te_editor.set_selected(val)
-        idx = self._idcs.get("title_exclude_available")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["title_exclude_available"]
-            if self.te_editor.get_available() != val:
-                self.te_editor.set_available(val)
+        val = self.__get_value("title_exclude_selected", top_left)
+        if val is not None and val != self.te_editor.get_selected():
+            self.te_editor.set_selected(val)
+        val = self.__get_value("title_exclude_available", top_left)
+        if val is not None and val != self.te_editor.get_available():
+            self.te_editor.set_available(val)
         # Title require editor
-        idx = self._idcs.get("title_require_selected")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["title_require_selected"]
-            if self.tr_editor.get_selected() != val:
-                self.tr_editor.set_selected(val)
-        idx = self._idcs.get("title_require_available")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["title_require_available"]
-            if self.tr_editor.get_available() != val:
-                self.tr_editor.set_available(val)
+        val = self.__get_value("title_require_selected", top_left)
+        if val is not None and val != self.tr_editor.get_selected():
+            self.tr_editor.set_selected(val)
+        val = self.__get_value("title_require_available", top_left)
+        if val is not None and val != self.tr_editor.get_available():
+            self.tr_editor.set_available(val)
         # Description exclude editor
-        idx = self._idcs.get("descr_exclude_selected")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["descr_exclude_selected"]
-            if self.de_editor.get_selected() != val:
-                self.de_editor.set_selected(val)
-        idx = self._idcs.get("descr_exclude_available")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["descr_exclude_available"]
-            if self.de_editor.get_available() != val:
-                self.de_editor.set_available(val)
+        val = self.__get_value("descr_exclude_selected", top_left)
+        if val is not None and val != self.de_editor.get_selected():
+            self.de_editor.set_selected(val)
+        val = self.__get_value("descr_exclude_available", top_left)
+        if val is not None and val != self.de_editor.get_available():
+            self.de_editor.set_available(val)
         # Description require editor
-        idx = self._idcs.get("descr_require_selected")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["descr_require_selected"]
-            if self.dr_editor.get_selected() != val:
-                self.dr_editor.set_selected(val)
-        idx = self._idcs.get("descr_require_available")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["descr_require_available"]
-            if self.dr_editor.get_available() != val:
-                self.dr_editor.set_available(val)
+        val = self.__get_value("descr_require_selected", top_left)
+        if val is not None and val != self.dr_editor.get_selected():
+            self.dr_editor.set_selected(val)
+        val = self.__get_value("descr_require_available", top_left)
+        if val is not None and val != self.dr_editor.get_available():
+            self.dr_editor.set_available(val)

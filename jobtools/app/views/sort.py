@@ -150,7 +150,7 @@ class SortPage(QWidget):
     def __init__(self, model: ConfigModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
-        self._model = model
+        self._cfg_model = model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
 
@@ -189,13 +189,13 @@ class SortPage(QWidget):
         self.layout().addStretch()
         
         # Register page with model
-        root_index = self._model.register_page("sort", self.defaults)
+        root_index = self._cfg_model.register_page("sort", self.defaults)
 
         # Map property keys to model indices
-        for row in range(self._model.rowCount(root_index)):
-            idx = self._model.index(row, 0, root_index)
-            key = self._model.data(idx)
-            val_idx = self._model.index(row, 1, root_index)
+        for row in range(self._cfg_model.rowCount(root_index)):
+            idx = self._cfg_model.index(row, 0, root_index)
+            key = self._cfg_model.data(idx)
+            val_idx = self._cfg_model.index(row, 1, root_index)
             self._idcs[key] = val_idx
 
         # Connect view to data model
@@ -212,7 +212,7 @@ class SortPage(QWidget):
                 lambda L, v=value: self._update_model(f"terms_available_{str(v)}", L))
         
         # Connect model to view updates
-        self._model.dataChanged.connect(self._data_changed)
+        self._cfg_model.dataChanged.connect(self._data_changed)
 
         # Trigger initial data load
         self._data_changed(QModelIndex(), QModelIndex())
@@ -224,50 +224,37 @@ class SortPage(QWidget):
     def _update_model(self, key: str, value):
         """ Update model data from view changes. """
         if key in self._idcs:
-            self._model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+            self._cfg_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
         """ Helper to get model value for a key if in changed range. """
         idx = self._idcs.get(key)
-        if idx is None or (top_left.isValid() and top_left != idx):
-            return self.defaults[key]
-        val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-        return val if val is not None else self.defaults[key]
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._cfg_model.data(idx, Qt.ItemDataRole.DisplayRole)
+            if val is None:
+                val = self.defaults[key]
+            return val
+        return None
 
     @Slot(QModelIndex, QModelIndex)
     def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Degree values
-        idx = self._idcs.get("degree_values")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["degree_values"]
-            if self.dv_selector.get_values() != val:
-                self.dv_selector.set_values(*val)
+        val = self.__get_value("degree_values", top_left)
+        if val is not None and val != self.dv_selector.get_values():
+            self.dv_selector.set_values(*val)
         # Location order
-        idx = self._idcs.get("location_order_selected")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["location_order_selected"]
-            if self.lo_selector.get_selected() != val:
-                self.lo_selector.set_selected(val)
-        idx = self._idcs.get("location_order_available")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["location_order_available"]
-            if self.lo_selector.get_available() != val:
-                self.lo_selector.set_available(val)
+        val = self.__get_value("location_order_selected", top_left)
+        if val is not None and val != self.lo_selector.get_selected():
+            self.lo_selector.set_selected(val)
+        val = self.__get_value("location_order_available", top_left)
+        if val is not None and val != self.lo_selector.get_available():
+            self.lo_selector.set_available(val)
         # Term emphasis selectors
         for value, selector in self.te_selectors.items():
-            idx = self._idcs.get(f"terms_selected_{str(value)}")
-            if idx is not None and (not top_left.isValid() or top_left == idx):
-                val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-                val = val if val is not None else self.defaults[f"terms_selected_{str(value)}"]
-                if selector.get_selected() != val:
-                    selector.set_selected(val)
-            idx = self._idcs.get(f"terms_available_{str(value)}")
-            if idx is not None and (not top_left.isValid() or top_left == idx):
-                val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-                val = val if val is not None else self.defaults[f"terms_available_{str(value)}"]
-                if selector.get_available() != val:
-                    selector.set_available(val)
+            val = self.__get_value(f"terms_selected_{str(value)}", top_left)
+            if val is not None and val != selector.get_selected():
+                selector.set_selected(val)
+            val = self.__get_value(f"terms_available_{str(value)}", top_left)
+            if val is not None and val != selector.get_available():
+                selector.set_available(val)

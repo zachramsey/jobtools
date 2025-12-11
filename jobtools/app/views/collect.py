@@ -100,10 +100,10 @@ class DataSourceSelector(QWidget):
 
 
 class CollectPage(QWidget):
-    def __init__(self, model: ConfigModel):
+    def __init__(self, config_model: ConfigModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
-        self._model = model
+        self._config_model = config_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
         
@@ -152,13 +152,13 @@ class CollectPage(QWidget):
         self.layout().addStretch()
 
         # Register page with model
-        root_index = self._model.register_page("collect", self.defaults)
+        root_index = self._config_model.register_page("collect", self.defaults)
 
         # Map property keys to model indices
-        for row in range(self._model.rowCount(root_index)):
-            idx = self._model.index(row, 0, root_index)
-            key = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val_idx = self._model.index(row, 1, root_index)
+        for row in range(self._config_model.rowCount(root_index)):
+            idx = self._config_model.index(row, 0, root_index)
+            key = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
+            val_idx = self._config_model.index(row, 1, root_index)
             self._idcs[key] = val_idx
 
         # Connect view to data model
@@ -180,7 +180,7 @@ class CollectPage(QWidget):
             lambda n: self._update_model("hours_old", n))
         
         # Connect model to view updates
-        self._model.dataChanged.connect(self._data_changed)
+        self._config_model.dataChanged.connect(self._data_changed)
 
         # Trigger initial data load
         self._data_changed(QModelIndex(), QModelIndex())
@@ -192,70 +192,48 @@ class CollectPage(QWidget):
     def _update_model(self, key: str, value):
         """ Update model data from view changes. """
         if key in self._idcs:
-            self._model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+            self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
         """ Helper to get model value for a key if in changed range. """
         idx = self._idcs.get(key)
-        if idx is None or (top_left.isValid() and top_left != idx):
-            return self.defaults[key]
-        val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-        return val if val is not None else self.defaults[key]
+        if idx is not None and (not top_left.isValid() or top_left == idx):
+            val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
+            if val is None:
+                val = self.defaults[key]
+            return val
+        return None
 
     @Slot(QModelIndex, QModelIndex)
     def _data_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
         # Proxy
-        idx = self._idcs.get("proxy")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["proxy"]
-            if self.p_editor.text().strip() != val:
-                self.p_editor.setText(val)
+        val = self.__get_value("proxy", top_left)
+        if val is not None and val != self.p_editor.text().strip():
+            self.p_editor.setText(val)
         # Data source
-        idx = self._idcs.get("data_source")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["data_source"]
-            if self.ds_selector.get_source() != val:
-                self.ds_selector.set_source(val)
+        val = self.__get_value("data_source", top_left)
+        if val is not None and val != self.ds_selector.get_source():
+            self.ds_selector.set_source(val)
         # Sites
-        idx = self._idcs.get("sites_selected")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["sites_selected"]
-            if self.s_selector.get_selected() != val:
-                self.s_selector.set_selected(val)
-        idx = self._idcs.get("sites_available")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["sites_available"]
-            if self.s_selector.get_available() != val:
-                self.s_selector.set_available(val)
+        val = self.__get_value("sites_selected", top_left)
+        if val is not None and val != self.s_selector.get_selected():
+            self.s_selector.set_selected(val)
+        val = self.__get_value("sites_available", top_left)
+        if val is not None and val != self.s_selector.get_available():
+            self.s_selector.set_available(val)
         # Locations
-        idx = self._idcs.get("locations_selected")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self.__get_value("locations_selected", top_left)
-            val = val if val is not None else self.defaults["locations_selected"]
-            if self.l_editor.get_selected() != val:
-                self.l_editor.set_selected(val)
-        idx = self._idcs.get("locations_available")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self.__get_value("locations_available", top_left)
-            val = val if val is not None else self.defaults["locations_available"]
-            if self.l_editor.get_available() != val:
-                self.l_editor.set_available(val)
+        val = self.__get_value("locations_selected", top_left)
+        if val is not None and val != self.l_editor.get_selected():
+            self.l_editor.set_selected(val)
+        val = self.__get_value("locations_available", top_left)
+        if val is not None and val != self.l_editor.get_available():
+            self.l_editor.set_available(val)
         # Queries
-        idx = self._idcs.get("queries")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["queries"]
-            if self.q_editor.get_items() != val:
-                self.q_editor.set_items(val)
+        val = self.__get_value("queries", top_left)
+        if val is not None and val != self.q_editor.get_items():
+            self.q_editor.set_items(val)
         # Hours old
-        idx = self._idcs.get("hours_old")
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val = val if val is not None else self.defaults["hours_old"]
-            if self.h_editor.value() != val:
-                self.h_editor.setValue(val)
+        val = self.__get_value("hours_old", top_left)
+        if val is not None and val != self.h_editor.value():
+            self.h_editor.setValue(val)
