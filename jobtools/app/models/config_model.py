@@ -66,12 +66,12 @@ class ConfigModel(QAbstractItemModel):
         # Path to persistent config file
         self._cfg_path = os.path.join(get_config_dir(), "persistent.json")
 
-        # Load existing config if it exists
-        if os.path.exists(self._cfg_path):
-            self.load_from_file(self._cfg_path)
-
         # Auto-save on data change
         self.dataChanged.connect(lambda: self.save_to_file(self._cfg_path))
+
+    def load_last_config(self):
+        """ Load the last saved configuration from the persistent file. """
+        self.load_from_file(self._cfg_path)
 
     def register_page(self, page_name: str, defaults: dict) -> QModelIndex:
         """ Register a new page in the configuration model.
@@ -209,6 +209,7 @@ class ConfigModel(QAbstractItemModel):
             with open(filepath, 'r') as f:
                 data = json.load(f)
             self._recursive_load(data, self._root_item)
+            self.dataChanged.emit(QModelIndex(), QModelIndex())
         except FileNotFoundError:
             pass
 

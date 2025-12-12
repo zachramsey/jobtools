@@ -7,7 +7,6 @@ from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
 from .models.config_model import ConfigModel
 from .models.sort_filter_model import SortFilterModel
-from .models.data_model import DataModel
 from .views.runner import RunnerPage
 from .views.collect import CollectPage
 from .views.filter import FilterPage
@@ -15,7 +14,7 @@ from .views.sort import SortPage
 from .views.data import DataPage
 from .views.console import ConsolePanel
 from .views.settings import SettingsPage
-from .utils import get_icon, get_sys_theme, get_data_sources
+from .utils import get_icon, get_sys_theme
 
 
 class JobToolsApp(QMainWindow):
@@ -80,22 +79,29 @@ class JobToolsApp(QMainWindow):
         # Initialize the config model
         cfg_model = ConfigModel()
         sort_filter_model = SortFilterModel()
-        data_sources = get_data_sources()
-        latest = max(filter(lambda d: d != "Archive", data_sources.keys()))
-        sort_filter_model.setSourceModel(DataModel(data_sources[latest]))
 
-        # Populate Pages
-        self.add_page(RunnerPage(cfg_model), "runner", "play_arrow", icon_size=36)
-        self.add_page(CollectPage(cfg_model), "collect", "search")
-        self.add_page(FilterPage(cfg_model, sort_filter_model), "filter", "filter_alt")
-        self.add_page(SortPage(cfg_model, sort_filter_model), "sort", "sort", icon_size=40)
-        self.add_page(DataPage(cfg_model, sort_filter_model), "data", "table_chart")
-        self.add_page(ConsolePanel(), "console", "terminal", icon_size=40, align_bottom=True)
-        self.add_page(SettingsPage(), "settings", "settings", align_bottom=True)
+        # Create and add pages
+        runner_page = RunnerPage(cfg_model)
+        collect_page = CollectPage(cfg_model, sort_filter_model)
+        filter_page = FilterPage(cfg_model, sort_filter_model)
+        sort_page = SortPage(cfg_model, sort_filter_model)
+        data_page = DataPage(cfg_model, sort_filter_model)
+        console_page = ConsolePanel()
+        settings_page = SettingsPage()
+        self.add_page(runner_page, "runner", "play_arrow", icon_size=36)
+        self.add_page(collect_page, "collect", "search")
+        self.add_page(filter_page, "filter", "filter_alt")
+        self.add_page(sort_page, "sort", "sort", icon_size=40)
+        self.add_page(data_page, "data", "table_chart")
+        self.add_page(console_page, "console", "terminal", icon_size=40, align_bottom=True)
+        self.add_page(settings_page, "settings", "settings", align_bottom=True)
 
         # Select first page by default
         if self.nav_panel.btn_group.buttons():
             self.nav_panel.btn_group.buttons()[0].click()
+
+        # Load config from last session
+        cfg_model.load_last_config()
 
     def add_page(self,
                  widget: QWidget,

@@ -46,13 +46,13 @@ class FilterPage(QWidget):
 
         # Wok model selector
         self.layout().addWidget(QHeader("Work Model", tooltip=WM_TT))
-        self.wm_selector = QCheckBoxSelect(["REMOTE", "ONSITE"])
+        self.wm_selector = QCheckBoxSelect(["remote", "onsite"])
         self.layout().addWidget(self.wm_selector)
         self.defaults["work_models"] = []
 
         # Job type selector
         self.layout().addWidget(QHeader("Job Types", tooltip=JT_TT))
-        self.jt_selector = QCheckBoxSelect([jt.name for jt in JobType])
+        self.jt_selector = QCheckBoxSelect([jt.value[0] for jt in JobType])
         self.layout().addWidget(self.jt_selector)
         self.defaults["job_types"] = []
 
@@ -101,7 +101,7 @@ class FilterPage(QWidget):
             val_idx = self._config_model.index(row, 1, root_index)
             self._idcs[key] = val_idx
 
-        # Connect view to data model
+        # Connect view to config model
         self.wm_selector.selectionChanged.connect(
             lambda L: self._update_config("work_models", L))
         self.jt_selector.selectionChanged.connect(
@@ -123,11 +123,8 @@ class FilterPage(QWidget):
         self.dr_editor.availableChanged.connect(
             lambda L: self._update_config("descr_require_available", L))
         
-        # Connect model to view updates
+        # Connect config model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
-
-        # Trigger initial data load
-        self._on_config_changed(QModelIndex(), QModelIndex())
 
     def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
@@ -135,8 +132,9 @@ class FilterPage(QWidget):
 
     def _update_config(self, key: str, value):
         """ Update model data from view changes. """
-        if key in self._idcs:
-            self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+        idx = self._idcs.get(key)
+        if idx is not None:
+            self._config_model.setData(idx, value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
         """ Get value from model for a specific key. """
@@ -151,54 +149,52 @@ class FilterPage(QWidget):
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
-        update = False
         # Work model selector
         val = self.__get_value("work_models", top_left)
-        if val is not None and val != self.wm_selector.get_selected():
-            self.wm_selector.set_selected(val)
-            self._filter_model.setFilter("is_remote", "exact", [wm == "Remote" or wm != "Onsite" for wm in val])
-            update = True
+        if val is not None:
+            if val != self.wm_selector.get_selected():
+                self.wm_selector.set_selected(val)
+            val = [wm.upper() == "remote" for wm in val]
+            self._filter_model.setRowFilter("is_remote", "exact", val)
         # Job type selector
         val = self.__get_value("job_types", top_left)
-        if val is not None and val != self.jt_selector.get_selected():
-            self.jt_selector.set_selected(val)
-            self._filter_model.setFilter("job_type", "exact", val)
-            update = True
+        if val is not None:
+            if val != self.jt_selector.get_selected():
+                self.jt_selector.set_selected(val)
+            self._filter_model.setRowFilter("job_type", "regex", val)
         # Title exclude editor
         val = self.__get_value("title_exclude_selected", top_left)
-        if val is not None and val != self.te_editor.get_selected():
-            self.te_editor.set_selected(val)
-            self._filter_model.setFilter("title", "regex", val)
-            update = True
+        if val is not None:
+            if val != self.te_editor.get_selected():
+                self.te_editor.set_selected(val)
+            self._filter_model.setRowFilter("title", "regex", val, invert=True)
         val = self.__get_value("title_exclude_available", top_left)
         if val is not None and val != self.te_editor.get_available():
             self.te_editor.set_available(val)
         # Title require editor
         val = self.__get_value("title_require_selected", top_left)
-        if val is not None and val != self.tr_editor.get_selected():
-            self.tr_editor.set_selected(val)
-            self._filter_model.setFilter("title", "regex", val, invert=True)
-            update = True
+        if val is not None:
+            if val != self.tr_editor.get_selected():
+                self.tr_editor.set_selected(val)
+            self._filter_model.setRowFilter("title", "regex", val)
         val = self.__get_value("title_require_available", top_left)
         if val is not None and val != self.tr_editor.get_available():
             self.tr_editor.set_available(val)
         # Description exclude editor
         val = self.__get_value("descr_exclude_selected", top_left)
-        if val is not None and val != self.de_editor.get_selected():
-            self.de_editor.set_selected(val)
-            self._filter_model.setFilter("description", "regex", val)
-            update = True
+        if val is not None:
+            if val != self.de_editor.get_selected():
+                self.de_editor.set_selected(val)
+            self._filter_model.setRowFilter("description", "regex", val, invert=True)
         val = self.__get_value("descr_exclude_available", top_left)
         if val is not None and val != self.de_editor.get_available():
             self.de_editor.set_available(val)
         # Description require editor
         val = self.__get_value("descr_require_selected", top_left)
-        if val is not None and val != self.dr_editor.get_selected():
-            self.dr_editor.set_selected(val)
-            self._filter_model.setFilter("description", "regex", val, invert=True)
-            update = True
+        if val is not None:
+            if val != self.dr_editor.get_selected():
+                self.dr_editor.set_selected(val)
+            self._filter_model.setRowFilter("description", "regex", val)
         val = self.__get_value("descr_require_available", top_left)
         if val is not None and val != self.dr_editor.get_available():
             self.dr_editor.set_available(val)
-        if update:
-            self._filter_model.invalidateFilter()

@@ -2,6 +2,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QRadioButton, QLineEdit, QSpinBox)
 from PySide6.QtCore import QModelIndex, Qt, Signal, Slot
 from ..models.config_model import ConfigModel
+from ..models.sort_filter_model import SortFilterModel
 from ..custom_widgets import QHeader, QPlainTextListEdit, QChipSelect
 
 
@@ -100,10 +101,11 @@ class DataSourceSelector(QWidget):
 
 
 class CollectPage(QWidget):
-    def __init__(self, config_model: ConfigModel):
+    def __init__(self, config_model: ConfigModel, sort_model: SortFilterModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
+        self._sort_model = sort_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
         
@@ -182,9 +184,6 @@ class CollectPage(QWidget):
         # Connect model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
 
-        # Trigger initial data load
-        self._on_config_changed(QModelIndex(), QModelIndex())
-
     def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
         return super().layout() # type: ignore
@@ -219,6 +218,7 @@ class CollectPage(QWidget):
         val = self.__get_value("sites_selected", top_left)
         if val is not None and val != self.s_selector.get_selected():
             self.s_selector.set_selected(val)
+            self._sort_model.update_site_sort(val)
         val = self.__get_value("sites_available", top_left)
         if val is not None and val != self.s_selector.get_available():
             self.s_selector.set_available(val)

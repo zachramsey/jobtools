@@ -8,73 +8,46 @@ class SortFilterModel(QSortFilterProxyModel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._hidden_columns = set()
-        self._sort_column_map = {}
-        self._filters = {}
+        self._col_filters = set()
+        self._sort_key_map = {}
+        self._row_filters = {}
 
-    def setHiddenColumns(self, columns: list[str]):
-        """ Set the columns to be hidden in the view.
+    #####################
+    ##  Column Filters ##
+    #####################
+
+    def setColumnFilter(self, columns: list[str]):
+        """ Set columns to be hidden in the view.
 
         Parameters
         ----------
         columns : list[str]
             List of column names to hide.
         """
-        self._hidden_columns.clear()
-        for col_name in columns:
-            col_idx = self.sourceModel().columnIndex(col_name)  # type: ignore
-            if col_idx != -1:
-                self._hidden_columns.add(col_idx)
+        if self.sourceModel():
+            for col in columns:
+                if col in self.sourceModel().columns:  # type: ignore
+                    col_idx = self.sourceModel().columnIndex(col)  # type: ignore
+                    self._col_filters.add(col_idx)
+        self.invalidateFilter()
 
-    def setDisplayColumns(self, columns: list[str]):
-        """ Set the columns to be displayed in the view.
+    def clearColumnFilters(self):
+        """ Clear all hidden columns. """
+        self._col_filters.clear()
+        self.invalidateFilter()
 
-        Parameters
-        ----------
-        columns : list[str]
-            List of column names to display.
+    def filterAcceptsColumn(self, source_column: int, source_parent) -> bool:
+        if self._col_filters:
+            is_filter = source_column in self._col_filters
+            is_key = source_column in self._sort_key_map.values()
+            return not (is_filter or is_key)
+        return True
+    
+    #####################
+    ##   Row Filters   ##
+    #####################
 
-        Notes
-        -----
-        Sets hidden columns by exclusion from the full set of columns.  
-        See also: `setHiddenColumns`.
-        """
-        all_columns = set(range(self.sourceModel().columnCount(None)))  # type: ignore
-        self._hidden_columns = all_columns
-        for col_name in columns:
-            col_idx = self.sourceModel().columnIndex(col_name)  # type: ignore
-            if col_idx != -1 and col_idx in self._hidden_columns:
-                self._hidden_columns.remove(col_idx)
-
-    def update_kw_score(self, keyword_value_map: dict[int, list[str]]):
-        """ Update keyword score in the source model. """
-        self.sourceModel().calc_keyword_score(keyword_value_map)  # type: ignore
-
-    def update_degree_score(self, degree_values: tuple[int, int, int]):
-        """ Update degree score in the source model. """
-        self.sourceModel().calc_degree_score(degree_values)  # type: ignore
-
-    def update_location_score(self, location_order: list[str]):
-        """ Update location score in the source model. """
-        self.sourceModel().calc_location_score(location_order)  # type: ignore
-
-    def setSortColumnMap(self, column_map: dict[str, str]):
-        """ Set the mapping between displayed column
-        and their corresponding sorting key column.
-
-        Parameters
-        ----------
-        column_map : dict[str, str]
-            Dictionary mapping view column names to key column names.
-        """
-        self._sort_column_map.clear()
-        for view_col, key_col in column_map.items():
-            view_idx = self.sourceModel().columnIndex(view_col) # type: ignore
-            key_idx = self.sourceModel().columnIndex(key_col)   # type: ignore
-            if view_idx != -1 and key_idx != -1:
-                self._sort_column_map[view_idx] = key_idx
-
-    def setFilter(self, column: str, filter_type: str, filter_value, invert: bool = False):
+    def setRowFilter(self, column: str, filter_type: str, filter_value, invert: bool = False):
         """ Add or update a filter for a specific column.
 
         Parameters
@@ -91,14 +64,22 @@ class SortFilterModel(QSortFilterProxyModel):
         invert : bool, optional
             Whether to invert the filter logic. Default is False.
         """
-        col_idx = self.sourceModel().columnIndex(column)        # type: ignore
-        if col_idx != -1:
-            if filter_type == "regex" and isinstance(filter_value, list):
-                filter_value = build_regex(filter_value)
-            self._filters[col_idx] = (filter_type, filter_value, invert)
-            self.invalidateFilter()
+        print(f"Setting filter for column {column} with type {filter_type} and value {filter_value}")
+        if filter_type == "regex" and isinstance(filter_value, list):
+            filter_value = build_regex(filter_value)
+        if not self.sourceModel():
+            return
+        col_idx = self.sourceModel().columnIndex(column)  # type: ignore
+        # HACK: Use negative index for inverted filters;
+        #       doesn't work with 0, but that's just col `id`
+        col_idx *= 1 - (2 * int(invert))
+        _filter = (filter_type, filter_value)
+        if self._row_filters.get(col_idx) == _filter:
+            return
+        self._row_filters[col_idx] = _filter
+        self.invalidateFilter()
 
-    def removeFilter(self, column: str):
+    def removeRowFilter(self, column: str):
         """ Remove the filter for a specific column.
 
         Parameters
@@ -106,45 +87,78 @@ class SortFilterModel(QSortFilterProxyModel):
         column : str
             The name of the column to remove the filter from.
         """
-        col_idx = self.sourceModel().columnIndex(column)        # type: ignore
-        if col_idx != -1 and col_idx in self._filters:
-            del self._filters[col_idx]
+        if column in self._row_filters:
+            col_idx = self.sourceModel().columnIndex(column)  # type: ignore
+            del self._row_filters[col_idx]
             self.invalidateFilter()
 
-    def filterAcceptsColumn(self, source_column: int, source_parent) -> bool:
-        if source_column in self._hidden_columns:
-            return False
-        return True
-    
-    def lessThan(self, left, right) -> bool:
-        if left.column() in self._sort_column_map:
-            # Handle key-based sorting
-            key_column = self._sort_column_map[left.column()]
-            left_key = left.siblingAtColumn(key_column)
-            right_key = right.siblingAtColumn(key_column)
-            left_val = self.sourceModel().data(left_key, Qt.ItemDataRole.EditRole)
-            right_val = self.sourceModel().data(right_key, Qt.ItemDataRole.EditRole)
-            return left_val < right_val
-        return super().lessThan(left, right)
-
     def filterAcceptsRow(self, source_row: int, source_parent) -> bool:
-        if not self._filters:
-            return True
-        source_model = self.sourceModel()
-        for col_idx, (filter_type, filter_val, invert) in self._filters.items():
-            idx = source_model.index(source_row, col_idx, source_parent)
-            val = source_model.data(idx, Qt.ItemDataRole.EditRole)
-            result = False
-            try:
-                if filter_type == "regex":
-                    result = re.search(str(filter_val), str(val),
-                                       re.IGNORECASE) is not None
-                elif filter_type == "range":
-                    min_val, max_val = filter_val
-                    result = min_val <= float(val) <= max_val
-                elif filter_type == "exact":
-                    result = val == filter_val
-                return not result if invert else result
-            except Exception:
+        for col_idx, (filter_type, filter_val) in self._row_filters.items():
+            cell_idx = self.sourceModel().index(source_row, abs(col_idx), source_parent)
+            cell_val = self.sourceModel().data(cell_idx, Qt.ItemDataRole.EditRole)
+            if filter_type == "regex":
+                accepts = bool(re.search(str(filter_val), str(cell_val), re.IGNORECASE))
+            elif filter_type == "range":
+                accepts = filter_val[0] <= float(cell_val) <= filter_val[1]
+            elif filter_type == "exact":
+                if not isinstance(filter_val, list):
+                    filter_val = [filter_val]
+                accepts = cell_val in filter_val
+            if col_idx < 0:
+                accepts = not accepts
+            if not accepts:
                 return False
         return True
+    
+    #####################
+    ##     Sorting     ##
+    #####################
+    
+    def setSortColumnMap(self, column_map: dict[str, str]):
+        """ Set the mapping between displayed column
+        and their corresponding sorting key column.
+
+        Parameters
+        ----------
+        column_map : dict[str, str]
+            Dictionary mapping view column names to key column names.
+        """
+        self._sort_key_map.clear()
+        for view_col_name, key_col_name in column_map.items():
+            view_col_idx = self.sourceModel().columnIndex(view_col_name) # type: ignore
+            key_col_idx = self.sourceModel().columnIndex(key_col_name)   # type: ignore
+            self._sort_key_map[view_col_idx] = key_col_idx
+    
+    def lessThan(self, left, right) -> bool:
+        left_col = left.column()
+        if left_col in self._sort_key_map:
+            # Use the corresponding key column for sorting
+            key_col = self._sort_key_map[left_col]
+            left = left.siblingAtColumn(key_col)
+            right = right.siblingAtColumn(key_col)
+        try:
+            # Try to use the data value for sorting
+            left_val = self.sourceModel().data(left, Qt.ItemDataRole.EditRole)
+            right_val = self.sourceModel().data(right, Qt.ItemDataRole.EditRole)
+            return left_val < right_val
+        except Exception:
+            # Fallback to display value if data value comparison fails
+            left_val = self.sourceModel().data(left, Qt.ItemDataRole.DisplayRole)
+            right_val = self.sourceModel().data(right, Qt.ItemDataRole.DisplayRole)
+            return left_val < right_val
+
+    def update_keyword_sort(self, keyword_value_map: dict[int, list[str]]):
+        """ Update keyword score in the source model. """
+        self.sourceModel().calc_keyword_score(keyword_value_map)  # type: ignore
+
+    def update_degree_sort(self, degree_values: tuple[int, int, int]):
+        """ Update degree score in the source model. """
+        self.sourceModel().calc_degree_score(degree_values)  # type: ignore
+
+    def update_location_sort(self, location_order: list[str]):
+        """ Update location score in the source model. """
+        self.sourceModel().calc_location_score(location_order)  # type: ignore
+
+    def update_site_sort(self, site_order: list[str]):
+        """ Update site score in the source model. """
+        self.sourceModel().calc_site_score(site_order)  # type: ignore

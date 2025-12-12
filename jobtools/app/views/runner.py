@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QModelIndex, Slot
 from ..custom_widgets import QHeader
 from ..models.config_model import ConfigModel
 from ..models.data_model import DataModel
+from ..models.data_worker import collect_jobs
 from ..utils import get_config_dir
 
 
@@ -104,19 +105,13 @@ class RunnerPage(QWidget):
             self.run.style().unpolish(self.run)
             self.run.style().polish(self.run)
             # Setup data collection worker
-            self._data_model = DataModel.setup_collection(self._config_model.get_config_dict())
-            # Connect worker result signals
-            self._data_model.worker.finished.connect(self._on_collection_finished)
-            self._data_model.worker.error.connect(self._on_collection_error)
-            # Start thread
-            self._data_model.worker_thread.start()
+            self._cancel_event = collect_jobs(self._config_model.get_config_dict(),
+                                              self._on_collection_finished,
+                                              self._on_collection_error)
         else:
-            if not (self._data_model.worker_thread and self._data_model.worker_thread.isRunning()):
-                # Nothing to cancel
-                return
             # Signal cancellation
-            if self._data_model.cancel_event:
-                self._data_model.cancel_event.set()
+            if self._cancel_event:
+                self._cancel_event.set()
             self.run.setText("Canceling...")
             self.run.setEnabled(False)
 
@@ -128,12 +123,11 @@ class RunnerPage(QWidget):
         self.run.style().unpolish(self.run)
         self.run.style().polish(self.run)
         self.run.setEnabled(True)
-        self._data_model.clear_cancel_event()
+        self._cancel_event = None
 
     @Slot(str)
     def _on_collection_error(self, error_msg: str):
         """ Handle errors during job data collection. """
         self.run.setEnabled(True)
         self.run.setText("Collect Jobs")
-        self._data_model.clear_cancel_event()
         raise RuntimeError(f"Job data collection failed: {error_msg}")

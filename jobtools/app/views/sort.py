@@ -200,7 +200,7 @@ class SortPage(QWidget):
             val_idx = self._config_model.index(row, 1, root_index)
             self._idcs[key] = val_idx
 
-        # Connect view to data config model
+        # Connect view to config model
         self.dv_selector.valuesChanged.connect(
             lambda ba, ma, phd: self._update_config("degree_values", (ba, ma, phd)))
         self.lo_selector.selectionChanged.connect(
@@ -216,17 +216,15 @@ class SortPage(QWidget):
         # Connect config model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
 
-        # Trigger initial config load
-        self._on_config_changed(QModelIndex(), QModelIndex())
-
     def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
         return super().layout() # type: ignore
 
     def _update_config(self, key: str, value):
         """ Update config model from view changes. """
-        if key in self._idcs:
-            self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
+        idx = self._idcs.get(key)
+        if idx is not None:
+            self._config_model.setData(idx, value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
         """ Get value from config model for a specific key. """
@@ -241,19 +239,16 @@ class SortPage(QWidget):
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when config model changes. """
-        update = False
         # Degree values
         val = self.__get_value("degree_values", top_left)
         if val is not None and val != self.dv_selector.get_values():
             self.dv_selector.set_values(*val)
-            self._sort_model.update_degree_score(val)
-            update = True
+            self._sort_model.update_degree_sort(val)
         # Location order
         val = self.__get_value("location_order_selected", top_left)
         if val is not None and val != self.lo_selector.get_selected():
             self.lo_selector.set_selected(val)
-            self._sort_model.update_location_score(val)
-            update = True
+            self._sort_model.update_location_sort(val)
         val = self.__get_value("location_order_available", top_left)
         if val is not None and val != self.lo_selector.get_available():
             self.lo_selector.set_available(val)
@@ -264,9 +259,8 @@ class SortPage(QWidget):
             if val is not None and val != selector.get_selected():
                 selector.set_selected(val)
                 kw_val_map[value] = val
-                update = True
             val = self.__get_value(f"terms_available_{str(value)}", top_left)
             if val is not None and val != selector.get_available():
                 selector.set_available(val)
-        if update:
-            self._sort_model.invalidateFilter()
+        if kw_val_map:
+            self._sort_model.update_keyword_sort(kw_val_map)

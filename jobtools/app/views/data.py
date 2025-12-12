@@ -1,11 +1,27 @@
 import os
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTableView, QComboBox, QPushButton
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTableView, QComboBox, QPushButton, QHeaderView
 from ..custom_widgets import QHeader
 from ..models.config_model import ConfigModel
 from ..models.data_model import DataModel
 from ..models.sort_filter_model import SortFilterModel
 from ..utils import get_data_sources
+
+
+DEFAULT_HIDDEN = ['id', 'job_url_direct', 'salary_source', 'interval',
+                  'min_amount', 'max_amount', 'currency', 'job_level',
+                  'job_function', 'listing_type', 'emails', 'description',
+                  'company_industry', 'company_url', 'company_logo',
+                  'company_url_direct', 'company_addresses',
+                  'company_num_employees', 'company_revenue',
+                  'company_description', 'skills', 'experience_range',
+                  'company_rating', 'company_reviews_count', 'vacancy_count',
+                  'work_from_home_type', 'location', 'city'] 
+
+DEFAULT_DISPLAY = ['site', 'job_url', 'title', 'company', 'date_posted',
+                   'job_type', 'is_remote', 'state', 'has_ba', 'has_ma',
+                   'has_phd', 'keyword_score', 'keywords', 'degree_score',
+                   'location_score']
 
 
 class DataPage(QWidget):
@@ -24,13 +40,6 @@ class DataPage(QWidget):
         self._proxy_model.setDynamicSortFilter(True)
         self._proxy_model.setSortCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive) 
         self._proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self._proxy_model.setDisplayColumns(["date_posted", "state", "company",
-                                             "title", "has_ba", "has_ma",
-                                             "has_phd", "degree_score",
-                                             "keywords", "site"])
-        self._proxy_model.setSortColumnMap({"date_posted": "date_posted",
-                                            "state": "location_score",
-                                            "keywords": "keyword_score"})
 
         # Data source selector
         self.layout().addWidget(QHeader("Data Source"))
@@ -40,6 +49,7 @@ class DataPage(QWidget):
         data_sources = get_data_sources()
         for name, path in data_sources.items():
             self.data_selector.addItem(name, path)
+        self.data_selector.setCurrentIndex(1)
         data_selector_layout.addWidget(self.data_selector)
         self.data_load = QPushButton("Load Data")
         self.data_load.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -51,8 +61,14 @@ class DataPage(QWidget):
         # Data table view
         self.data_view = QTableView()
         self.data_view.setModel(self._proxy_model)
+        self.data_view.setAlternatingRowColors(True)
+        self.data_view.verticalHeader().setVisible(False)
+        self.data_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.data_view.setSortingEnabled(True)
         self.layout().addWidget(self.data_view)
+
+        # Load data source on startup
+        self._on_load_data_source()
 
     def layout(self) -> QVBoxLayout:
         """ Get layout as QVBoxLayout. """
@@ -61,8 +77,6 @@ class DataPage(QWidget):
     @Slot(int)
     def _on_load_data_source(self):
         """ Load selected data source into the data model. """
-        # index = self.data_selector.currentIndex()
-        # data_path = self.data_selector.itemData(index)
         data_path = self.data_selector.currentData()
         if isinstance(data_path, str) and os.path.exists(data_path):
             data_model = DataModel(data_path)
@@ -77,6 +91,8 @@ class DataPage(QWidget):
             # Calculate location scores
             loc_order = sort_cfg.get("location_order_selected", [])
             data_model.calc_location_score(loc_order)
-            # Update proxy model
+            # Configure proxy model
             self._proxy_model.setSourceModel(data_model)
-            self.data_view.resizeColumnsToContents()
+            self._proxy_model.setColumnFilter(DEFAULT_HIDDEN)
+            self._proxy_model.setSortColumnMap({"state": "location_score",
+                                                "keywords": "keyword_score"})
