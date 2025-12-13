@@ -1,25 +1,3 @@
-from .utils.html_builder import HTMLBuilder
-from .jobsdata import JobsData
-from .app.app import JobToolsApp
+from .app import JobToolsApp
 
-from .utils import description_parser
-from . import utils
-
-JOBSPY_COLS = [
-    "id", "site", "job_url", "job_url_direct", "title", "company", "location",
-    "date_posted", "job_type", "salary_source", "interval", "min_amount",
-    "max_amount", "currency", "is_remote", "job_level", "job_function",
-    "listing_type", "emails", "description", "company_industry", "company_url",
-    "company_logo", "company_url_direct", "company_addresses",
-    "company_num_employees", "company_revenue", "company_description",
-    "skills", "experience_range", "company_rating", "company_reviews_count",
-    "vacancy_count", "work_from_home_type"
-]
-
-__all__ = [
-    "HTMLBuilder",
-    "JobsData",
-    "JobToolsApp",
-    "description_parser",
-    "utils",
-]
+__all__ = ["JobToolsApp"]

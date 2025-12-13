@@ -341,10 +341,10 @@ class HTMLBuilder:
                 html += '               <span class="sort-arrow down">🮦</span>\n'
                 html += '             </div>\n'
             else:
-                html += f"          <th>\n"
+                html += "          <th>\n"
 
             html += f'                {val_hdr}\n'
-            html += f'              </th>\n'
+            html += '              </th>\n'
 
         html += "        </tr>\n"
         html += "      </thead>\n"

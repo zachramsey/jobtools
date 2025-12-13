@@ -1,7 +1,7 @@
 import logging
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTextEdit
 from PySide6.QtCore import QObject, Signal, Slot
-from ...utils.logger import JDLogger
+from ..utils import JDLogger
 
 
 class QtLogHandler(QObject, logging.Handler):
@@ -20,7 +20,7 @@ class QtLogHandler(QObject, logging.Handler):
         self.log_signal.emit(self.format(record))
 
 
-class ConsolePanel(QWidget):
+class ConsolePage(QWidget):
     """ Bottom log panel for displaying console output. """
 
     def __init__(self):

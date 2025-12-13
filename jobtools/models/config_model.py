@@ -1,9 +1,8 @@
 # app/model.py
 import json
-import os
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
 from ..utils import get_config_dir
-from ...jobsdata import JobsData
+from ..jobsdata import JobsData
 
 
 class TreeItem:
@@ -64,7 +63,7 @@ class ConfigModel(QAbstractItemModel):
         self._root_item = TreeItem(["Property", "Value"])
 
         # Path to persistent config file
-        self._cfg_path = os.path.join(get_config_dir(), "persistent.json")
+        self._cfg_path = str(get_config_dir() / "persistent.json")
 
         # Auto-save on data change
         self.dataChanged.connect(lambda: self.save_to_file(self._cfg_path))
@@ -250,9 +249,9 @@ class ConfigModel(QAbstractItemModel):
         """ Get a list of saved configuration names in the config directory. """
         config_dir = get_config_dir()
         config_names = []
-        for filename in os.listdir(config_dir):
-            if filename.endswith(".json") and filename != "persistent.json":
-                config_names.append(filename[:-5].strip().replace("_", " ").title())
+        for config_file in config_dir.iterdir():
+            if config_file.suffix == ".json" and config_file.name != "persistent.json":
+                config_names.append(config_file.stem.strip().replace("_", " ").title())
         return config_names
     
     def get_config_dict(self) -> dict:

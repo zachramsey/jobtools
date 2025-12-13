@@ -1,6 +1,6 @@
 from PySide6.QtCore import QSortFilterProxyModel, Qt
 import re
-from ...utils.patterns import build_regex
+from ..utils import build_regex
 
 
 class SortFilterModel(QSortFilterProxyModel):
@@ -64,7 +64,6 @@ class SortFilterModel(QSortFilterProxyModel):
         invert : bool, optional
             Whether to invert the filter logic. Default is False.
         """
-        print(f"Setting filter for column {column} with type {filter_type} and value {filter_value}")
         if filter_type == "regex" and isinstance(filter_value, list):
             filter_value = build_regex(filter_value)
         if not self.sourceModel():

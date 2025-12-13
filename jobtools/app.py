@@ -1,20 +1,13 @@
-import os
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QStackedWidget, QPushButton,
                                QFrame, QButtonGroup, QScrollArea)
 from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
-from .models.config_model import ConfigModel
-from .models.sort_filter_model import SortFilterModel
-from .views.runner import RunnerPage
-from .views.collect import CollectPage
-from .views.filter import FilterPage
-from .views.sort import SortPage
-from .views.data import DataPage
-from .views.console import ConsolePanel
-from .views.settings import SettingsPage
-from .utils import get_icon, get_sys_theme
+from .models import ConfigModel, SortFilterModel
+from .views import (RunnerPage, CollectPage, FilterPage, SortPage,
+                    DataPage, ConsolePage, SettingsPage)
+from .utils import get_resource_dir, get_icon, get_sys_theme
 
 
 class JobToolsApp(QMainWindow):
@@ -22,25 +15,22 @@ class JobToolsApp(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        # Setup resources
-        res_dir = os.path.join(os.path.dirname(__file__), "resources")
-        
-        # Add Roboto for default application font
-        sans_path = os.path.join(res_dir, "Roboto.ttf")
+        # Add Roboto as default application font
+        sans_path = str(get_resource_dir() / "Roboto.ttf")
         sans_font_id = QFontDatabase.addApplicationFont(sans_path)
         if sans_font_id != -1:
             sans_font = QFontDatabase.applicationFontFamilies(sans_font_id)[0]
             QGuiApplication.setFont(sans_font)
 
-        # Add Roboto Mono for monospace font
-        mono_path = os.path.join(res_dir, "RobotoMono.ttf")
+        # Add Roboto Mono as monospace font
+        mono_path = str(get_resource_dir() / "RobotoMono.ttf")
         mono_font_id = QFontDatabase.addApplicationFont(mono_path)
         if mono_font_id != -1:
             mono_font = QFontDatabase.applicationFontFamilies(mono_font_id)[0]
             QFont(mono_font).setStyleHint(QFont.StyleHint.Monospace)
 
-        # Add Material Symbols Outlined for icon theme
-        icon_path = os.path.join(res_dir, "MaterialSymbolsOutlined.ttf")
+        # Add Material Symbols Outlined as icon theme
+        icon_path = str(get_resource_dir() / "MaterialSymbolsOutlined.ttf")
         icon_font_id = QFontDatabase.addApplicationFont(icon_path)
         if icon_font_id != -1:
             icon_font = QFontDatabase.applicationFontFamilies(icon_font_id)[0]
@@ -69,8 +59,8 @@ class JobToolsApp(QMainWindow):
 
         # Apply stylesheet
         app = QApplication.instance()
-        theme_path = os.path.join(res_dir, f"theme_{get_sys_theme()}.xml")
-        qss_path = os.path.join(res_dir, "custom.qss")
+        theme_path = str(get_resource_dir() / f"theme_{get_sys_theme()}.xml")
+        qss_path = str(get_resource_dir() / "custom.qss")
         light_extra = {'danger': '#DB3E03', 'warning': '#977100', 'success': '#008679'}
         dark_extra = {'danger': '#FF8B69', 'warning': '#D8A300', 'success': '#48BDAE'}
         extra = dark_extra if get_sys_theme() == "dark" else light_extra
@@ -86,13 +76,13 @@ class JobToolsApp(QMainWindow):
         filter_page = FilterPage(cfg_model, sort_filter_model)
         sort_page = SortPage(cfg_model, sort_filter_model)
         data_page = DataPage(cfg_model, sort_filter_model)
-        console_page = ConsolePanel()
+        console_page = ConsolePage()
         settings_page = SettingsPage()
+        self.add_page(data_page, "data", "table_chart")
         self.add_page(runner_page, "runner", "play_arrow", icon_size=36)
         self.add_page(collect_page, "collect", "search")
         self.add_page(filter_page, "filter", "filter_alt")
         self.add_page(sort_page, "sort", "sort", icon_size=40)
-        self.add_page(data_page, "data", "table_chart")
         self.add_page(console_page, "console", "terminal", icon_size=40, align_bottom=True)
         self.add_page(settings_page, "settings", "settings", align_bottom=True)
 

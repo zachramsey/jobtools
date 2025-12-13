@@ -1,16 +1,17 @@
+from pathlib import Path
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
-from ...jobsdata import JobsData
+from ..jobsdata import JobsData
 
 
 class DataModel(QAbstractTableModel):
     """ Table model for displaying collected job data. """
     
-    def __init__(self, jobs_data: JobsData|str = JobsData()):
+    def __init__(self, jobs_data: JobsData|Path = JobsData()):
         """ Initialize the data model with job data from CSV file. """
         super().__init__()
         if isinstance(jobs_data, JobsData):
             self._jobs = jobs_data
-        elif isinstance(jobs_data, str):
+        elif isinstance(jobs_data, Path):
             self._jobs = JobsData.from_csv(jobs_data)
 
     @property

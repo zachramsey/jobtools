@@ -5,14 +5,29 @@ from markdownify import ATX, SPACES, UNDERSCORE     # type: ignore
 import multiprocessing as mp
 import os
 import pandas as pd
+from pathlib import Path
 import threading
 import time
 from typing import Callable
-import re
 
-from . import HTMLBuilder
-from .utils.logger import JDLogger
+from .utils import HTMLBuilder
+from .utils import JDLogger
 from .utils import parse_degrees, parse_location, build_regex
+from .utils import get_data_dir, get_data_sources
+
+
+COLUMN_ORDER = [
+    'id', 'date_posted', 'city', 'state', 'location', 'location_score',
+    'company', 'company_description', 'company_industry',
+    'company_num_employees', 'company_revenue', 'company_rating'
+    'company_reviews_count', 'company_addresses', 'company_url'
+    'company_url_direct', 'company_logo', 'title', 'job_function',
+    'description', 'skills', 'keywords', 'keyword_score', 'job_level',
+    'experience_range', 'job_type', 'work_from_home_type', 'is_remote',
+    'has_ba', 'has_ma', 'has_phd', 'degree_score', 'salary_source',
+    'interval', 'min_amount', 'max_amount', 'currency', 'vacancy_count',
+    'site', 'job_url', 'job_url_direct', 'emails'
+]
 
 
 def _scrape_jobs_worker(queue: mp.Queue, kwargs: dict):
@@ -25,11 +40,7 @@ def _scrape_jobs_worker(queue: mp.Queue, kwargs: dict):
 
 
 class JobsData:
-    """ Wrapper around jobspy API to collect and process job postings.
-    """
-
-    _out_path = os.path.join(os.path.dirname(__file__), "output")
-    """ Base output directory path for job data. """
+    """ Wrapper around jobspy API to collect and process job postings. """
 
     _logger = JDLogger()
     """ Logger instance for JobsData class. """
@@ -52,10 +63,10 @@ class JobsData:
         """
         date = dt.datetime.now().strftime("%Y%m%d")
         time = dt.datetime.now().strftime('%H%M')
-        self._new_path = os.path.join(self._out_path, date, time)
+        self._new_path = get_data_dir() / date / time
         """ Unique output directory for new/modified data. """
 
-        self._load_path = ""
+        self._load_path = Path()
         """ Path from which existing data was loaded. """
 
         self._modified = False
@@ -97,7 +108,7 @@ class JobsData:
         return self._df.copy()
 
     @property
-    def path(self) -> str:
+    def path(self) -> Path:
         """ Get the output path for saving data. """
         if self._modified or not self._load_path:
             return self._new_path
@@ -121,7 +132,7 @@ class JobsData:
         cls._logger.set_level(level)
 
     @classmethod
-    def from_csv(cls, source: str) -> 'JobsData':
+    def from_csv(cls, source: Path|str) -> 'JobsData':
         """ Create a JobsData instance from an existing CSV file.
 
         Parameters
@@ -129,68 +140,43 @@ class JobsData:
         source : str
             Source from which to load existing data.
 
-            *Options:*
-            - *`""` -> no existing data (Default)*
-            - *`"latest"` -> load most recent output directory*
-            - *`"archive"` -> load archive jobs_data.csv*
-            - *`"{yyyymmdd}/{HHMM}"` -> load specified subdirectory*
+            Supported values:
+            - *relative or absolute path to directory* : load from `jobs_data.csv` within specified directory
+            - *"latest"* : load from most recent data source
+            - *"archive"* : load from archive data path
 
         Returns
         -------
         JobsData
             JobsData instance with loaded data.
-
-        Notes
-        -----
-        When an explicit path is provided, it may be specified as a relative
-        path to either a directory or a file. If a directory is provided,
-        the `jobs_data.csv` file within that directory will be loaded.
         """
         # Load existing data if specified
-        path = ""
         if source:
             # Determine full path based on source
-            if source == "archive":
-                # Load output/jobs_data.csv
-                path = os.path.join(cls._out_path, "archive", "jobs_data.csv")
-            elif source == "latest":
-                # Find most recent day-wise subdirectory
-                day_dirs = []
-                for d in os.listdir(cls._out_path):
-                    if (os.path.isdir(os.path.join(cls._out_path, d)) and
-                        re.match(r"^\d{4}[01]\d[0-3]\d$", d)):
-                        day_dirs.append(d)
-                if len(day_dirs) == 0:
-                    raise FileNotFoundError("No existing day subdirectories found in output/.")
-                day_dirs.sort()
-                day_dir = day_dirs[-1]
-                # Find most recent time-wise subdirectory
-                time_dirs = []
-                for d in os.listdir(os.path.join(cls._out_path, day_dir)):
-                    if (os.path.isdir(os.path.join(cls._out_path, day_dir, d)) and
-                        re.match(r"^[0-2]\d[0-5]\d$", d)):
-                        time_dirs.append(d)
-                if len(time_dirs) == 0:
-                    raise FileNotFoundError(f"No existing time subdirectories found in output/{day_dir}.")
-                time_dirs.sort()
-                time_dir = time_dirs[-1]
-                # Construct full path to jobs_data.csv
-                path = os.path.join(cls._out_path, day_dir, time_dir, "jobs_data.csv")
+            path = Path()
+            if isinstance(source, str):
+                if source == "archive":
+                    # Use archive data path
+                    path = get_data_dir() / "archive" / "jobs_data.csv"
+                elif source == "latest":
+                    # Find most recent day-wise subdirectory
+                    data_paths = get_data_sources()
+                    path = data_paths[max(data_paths.keys())]
             else:
                 # Use specified directory
-                if source.startswith(cls._out_path):
+                if source.is_absolute():
                     path = source
                 else:
-                    path = os.path.join(cls._out_path, source)
-                # If path is a directory, append jobs_data.csv
-                if os.path.isdir(path):
-                    path = os.path.join(path, "jobs_data.csv")
+                    path = get_data_dir() / source
+                # If path is a directory, get jobs_data.csv within it
+                if path.is_dir():
+                    path = path / "jobs_data.csv"
             # Validate data source path
-            if not os.path.exists(path):
+            if not path.exists():
                 raise FileNotFoundError(f"Could not find existing data at {path}")
             # Load existing data
             jobsdata = cls(data=pd.read_csv(path))
-            jobsdata._load_path = os.path.dirname(path)
+            jobsdata._load_path = path.parent
             jobsdata._logger.info(f"Loaded {len(jobsdata)} jobs from {path}")
         else:
             jobsdata = cls()
@@ -206,6 +192,9 @@ class JobsData:
         # Add degree existence columns
         has_degrees = self._df["description"].map(parse_degrees)
         self._df["has_ba"], self._df["has_ma"], self._df["has_phd"] = zip(*has_degrees)
+        # Reorder columns
+        existing_cols = [col for col in COLUMN_ORDER if col in self._df.columns]
+        self._df = self._df.reindex(columns=existing_cols)
 
     def collect(self,
                 site_name: str | list[str],
@@ -330,6 +319,12 @@ class JobsData:
         else:
             raise TypeError(f"Unsupported type for update with JobsData: {type(other)}")
         self._df.reset_index(drop=True, inplace=True)
+
+    def drop_empty_cols(self):
+        """ Drop columns that contain only NaN or empty values. """
+        for col in self._df.columns:
+            if self._df[col].replace("", pd.NA).isna().all():
+                self._df.drop(columns=[col], inplace=True)
 
     def exists(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
         """ Create a boolean mask indicating which rows match the specified expression.
@@ -512,7 +507,8 @@ class JobsData:
                    keyword_value_map: dict[int, list[str]],
                    state_rank_order: list[str],
                    site_rank_order: list[str],
-                   degree_values: tuple[int, int, int]):
+                   degree_values: tuple[int, int, int],
+                   drop_intermediate: bool = True):
         """ Opinionated helper method to apply a priority ordering among job postings.
 
         Parameters
@@ -527,6 +523,8 @@ class JobsData:
             List of job sites in descending priority order.
         degree_values : tuple[int, int, int]
             Tuple of score adjustments for (bachelor, master, doctorate) degrees.
+        drop_intermediate : bool, optional
+            Whether to drop intermediate scoring columns after prioritization.
         """
         self._df["keyword_score"], self._df["keywords"] = self.keyword_score(keyword_value_map)
         self._df["degree_score"] = self.degree_score(degree_values)
@@ -536,8 +534,9 @@ class JobsData:
         self._df.sort_values(by=["date_posted", "req_score", "location_score", "site_score"],
                              ascending=False, inplace=True)
         self._df.reset_index(drop=True, inplace=True)
-        self._df.drop(columns=["keyword_score", "keywords", "degree_score",
-                               "req_score", "location_score", "site_score"], inplace=True)
+        if drop_intermediate:
+            self._df.drop(columns=["keyword_score", "keywords", "degree_score",
+                                "req_score", "location_score", "site_score"], inplace=True)
 
     def deduplicate(self) -> int:
         """ Remove duplicate job postings where the following column
@@ -566,59 +565,52 @@ class JobsData:
         self.logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
         return n_init - len(self._df)
     
-    def _validate_path(self, path: str, file_name: str) -> str:
+    def _validate_path(self, path: Path|None, file_name: str) -> Path:
         """ Validate and return output directory path.
 
         Parameters
         ----------
-        path : str
+        path : Path|None
             Output directory path.
         file_name : str
             Base output file name.
 
         Returns
         -------
-        str
+        Path
             Validated output directory path.
-
-        Raises
-        ------
-        ValueError
-            If a file path is provided instead of a directory path.
         """
         name, extension = file_name.rsplit('.', 1)
         # Determine output directory path
-        if not path:
+        if path is None:
             path = self.path
-        elif path.endswith(f".{extension}"):
+        elif path.suffix == f".{extension}":
             JobsData._logger.warning("Expected directory path, got file path: "
                                     f"{path}. Using parent directory instead.")
-            path = os.path.dirname(path)
+            path = path.parent
         # Ensure output directory exists
-        if not os.path.exists(path):
-            os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
         # Determine output file path
-        file = os.path.join(path, file_name)
-        # if not path.startswith(os.path.join(self._out_path, "archive")):
+        file = path / file_name
         # Make sure we don't overwrite existing HTML results
         if extension == "html":
             i = 0
             while os.path.exists(file):
                 i += 1
-                file = os.path.join(path, f"{name}_{i}.{extension}")
+                file = path / f"{name}_{i}.{extension}"
         return file
     
-    def export_csv(self, path: str = "") -> str:
+    def export_csv(self, path: Path|None = None) -> Path:
         """ Save collected job postings to CSV file.
 
         Parameters
         ----------
-        path : str, optional
+        path : Path, optional
             Output directory to save data; if empty, uses derived path.
 
         Returns
         -------
-        str
+        Path
             Path to the saved CSV file.
         """
         # Validate output path
@@ -642,7 +634,7 @@ class JobsData:
                    "has_phd": "PhD",
                    "job_url": "URL"},
                keys: dict[str, str] = {},
-               path: str = "") -> str:
+               path: Path|None = None) -> Path:
         """ Export DataFrame to a nicely formatted HTML file.
 
         Parameters
@@ -651,12 +643,12 @@ class JobsData:
             Mapping of column names to their display headers.
         keys : dict[str, str]
             Mapping of column names to associated columns used as sort keys.
-        path : str, optional
+        path : Path, optional
             Output directory to save HTML file; if empty, uses derived path.
 
         Returns
         -------
-        str
+        Path
             Path to the exported HTML file.
         """
         # Build HTML string from DataFrame

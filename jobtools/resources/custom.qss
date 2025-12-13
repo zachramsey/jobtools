@@ -33,3 +33,8 @@ QPushButton.help-button {{
     font-family: "Roboto Mono", monospace;
     font-size: 12px;
 }}
+
+QTableView {{
+    background-color: {QTMATERIAL_SECONDARYDARKCOLOR};
+    alternate-background-color: {QTMATERIAL_SECONDARYLIGHTCOLOR};
+}}

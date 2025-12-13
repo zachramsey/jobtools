@@ -1,10 +1,8 @@
 import os
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox
 from PySide6.QtCore import Qt, QModelIndex, Slot
-from ..custom_widgets import QHeader
-from ..models.config_model import ConfigModel
-from ..models.data_model import DataModel
-from ..models.data_worker import collect_jobs
+from .widgets import QHeader
+from ..models import ConfigModel, DataModel, collect_jobs
 from ..utils import get_config_dir
 
 
