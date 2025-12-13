@@ -146,18 +146,26 @@ class SortFilterModel(QSortFilterProxyModel):
             right_val = self.sourceModel().data(right, Qt.ItemDataRole.DisplayRole)
             return left_val < right_val
 
-    def update_keyword_sort(self, keyword_value_map: dict[int, list[str]]):
+    def update_keyword_sort(self, kw_value_map: dict[int, list[str]]):
         """ Update keyword score in the source model. """
-        self.sourceModel().calc_keyword_score(keyword_value_map)  # type: ignore
+        self.sourceModel().keyword_score(               # type: ignore
+            kw_value_map, inplace=True)
+        self.sourceModel().standard_ordering()          # type: ignore
 
     def update_degree_sort(self, degree_values: tuple[int, int, int]):
         """ Update degree score in the source model. """
-        self.sourceModel().calc_degree_score(degree_values)  # type: ignore
+        self.sourceModel().degree_score(                # type: ignore
+            degree_values, inplace=True)
+        self.sourceModel().standard_ordering()          # type: ignore
 
     def update_location_sort(self, location_order: list[str]):
         """ Update location score in the source model. """
-        self.sourceModel().calc_location_score(location_order)  # type: ignore
+        self.sourceModel().rank_order_score(            # type: ignore
+            "state", location_order, "location_score")
+        self.sourceModel().standard_ordering()          # type: ignore
 
     def update_site_sort(self, site_order: list[str]):
         """ Update site score in the source model. """
-        self.sourceModel().calc_site_score(site_order)  # type: ignore
+        self.sourceModel().rank_order_score(            # type: ignore
+            "site", site_order, "site_score")
+        self.sourceModel().standard_ordering()          # type: ignore

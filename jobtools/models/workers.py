@@ -2,7 +2,7 @@ from PySide6.QtCore import QObject, Signal, Slot, QThread
 from threading import Event
 import traceback
 from typing import Callable
-from ..jobsdata import JobsData
+from .jobsdata import JobsDataModel
 
 
 class CollectionWorker(QObject):
@@ -11,7 +11,7 @@ class CollectionWorker(QObject):
     finished = Signal(str)
     error = Signal(str)
 
-    def __init__(self, jobs_data: JobsData, config: dict, cancel_event: Event):
+    def __init__(self, jobs_data: JobsDataModel, config: dict, cancel_event: Event):
         super().__init__()
         self._jobs_data = jobs_data
         self._config = config.get("collect", {})
@@ -81,7 +81,7 @@ def collect_jobs(config: dict,
     Event
         Event object to signal cancellation of the job data collection process.
     """
-    jobs_data = JobsData()
+    jobs_data = JobsDataModel()
     cancel_event = Event()
     worker = CollectionWorker(jobs_data, config, cancel_event)
     # Move worker to a separate thread

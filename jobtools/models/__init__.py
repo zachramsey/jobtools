@@ -1,11 +1,11 @@
-from .config_model import ConfigModel
-from .data_model import DataModel
-from .sort_filter_model import SortFilterModel
-from .data_worker import collect_jobs
+from .config import ConfigModel
+from .jobsdata import JobsDataModel
+from .sort_filter import SortFilterModel
+from .workers import collect_jobs
 
 __all__ = [
     "ConfigModel",
-    "DataModel",
+    "JobsDataModel",
     "SortFilterModel",
     "collect_jobs",
 ]

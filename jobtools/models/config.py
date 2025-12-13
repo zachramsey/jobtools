@@ -2,7 +2,7 @@
 import json
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
 from ..utils import get_config_dir
-from ..jobsdata import JobsData
+from .jobsdata import JobsDataModel
 
 
 class TreeItem:
@@ -55,7 +55,7 @@ class TreeItem:
 class ConfigModel(QAbstractItemModel):
     """ The central configuration model. """
 
-    jobs: JobsData
+    jobs: JobsDataModel
     """ The JobsData instance managed by this model. """
     
     def __init__(self, parent=None):

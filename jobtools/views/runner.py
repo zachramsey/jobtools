@@ -2,7 +2,7 @@ import os
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox
 from PySide6.QtCore import Qt, QModelIndex, Slot
 from .widgets import QHeader
-from ..models import ConfigModel, DataModel, collect_jobs
+from ..models import ConfigModel, collect_jobs
 from ..utils import get_config_dir
 
 
@@ -13,9 +13,6 @@ LC_TT = """"""
 
 class RunnerPage(QWidget):
     """ Page for running JobTools operations. """
-
-    _data_model: DataModel
-    """ Controller for job data operations. """
 
     def __init__(self, config_model: ConfigModel):
         super().__init__()

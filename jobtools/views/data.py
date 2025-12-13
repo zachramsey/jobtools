@@ -1,8 +1,8 @@
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTableView, QComboBox, QPushButton, QHeaderView
 from .widgets import QHeader
-from ..models import ConfigModel, DataModel, SortFilterModel
-from ..utils.utils import get_data_sources
+from ..models import ConfigModel, JobsDataModel, SortFilterModel
+from ..utils import get_data_sources
 
 
 DEFAULT_HIDDEN = ['id', 'job_url_direct', 'salary_source', 'interval',
@@ -79,18 +79,19 @@ class DataPage(QWidget):
         """ Load selected data source into the data model. """
         data_path = self.data_selector.currentData()
         if data_path.exists():
-            data_model = DataModel(data_path)
+            data_model = JobsDataModel(data_path)
             sort_cfg = self._config_model.get_config_dict().get("sort", {})
             # Calculate score columns
             kw_val_map = {int(terms_key.split("_")[-1]): sort_cfg[terms_key]
                           for terms_key in sort_cfg if terms_key.startswith("terms_selected_")}
-            data_model.calc_keyword_score(kw_val_map)
+            data_model.keyword_score(kw_val_map, inplace=True)
             deg_vals = sort_cfg.get("degree_values", [])
-            data_model.calc_degree_score(deg_vals)
+            data_model.degree_score(deg_vals, inplace=True)
             loc_order = sort_cfg.get("location_order_selected", [])
-            data_model.calc_location_score(loc_order)
+            data_model.rank_order_score("state", loc_order, "location_score")
             site_order = sort_cfg.get("sites_selected", [])
-            data_model.calc_site_score(site_order)
+            data_model.rank_order_score("site", site_order, "site_score")
+            data_model.standard_ordering()
             # Configure proxy model
             self._sort_filter_model.setSourceModel(data_model)
             self._sort_filter_model.setColumnFilter(DEFAULT_HIDDEN)
