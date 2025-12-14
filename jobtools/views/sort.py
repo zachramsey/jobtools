@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QRadioButton, QSpinBox
 from PySide6.QtCore import QModelIndex, Qt, Slot, Signal
 from .widgets import QHeader, QChipSelect
-from ..models import ConfigModel, SortFilterModel
+from ..models import ConfigModel, JobsDataModel
 from ..utils.location_parser import NAME_TO_ABBR
 
 
@@ -147,11 +147,11 @@ class DegreeValueSelector(QWidget):
     
 
 class SortPage(QWidget):
-    def __init__(self, config_model: ConfigModel, sort_model: SortFilterModel):
+    def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
-        self._sort_model = sort_model
+        self._data_model = data_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
 
@@ -242,24 +242,27 @@ class SortPage(QWidget):
         val = self.__get_value("degree_values", top_left)
         if val is not None and val != self.dv_selector.get_values():
             self.dv_selector.set_values(*val)
-            self._sort_model.update_degree_sort(val)
+            self._data_model.degree_score(val, inplace=True)
+            self._data_model.standard_ordering()
         # Location order
-        val = self.__get_value("location_order_selected", top_left)
-        if val is not None and val != self.lo_selector.get_selected():
-            self.lo_selector.set_selected(val)
-            self._sort_model.update_location_sort(val)
         val = self.__get_value("location_order_available", top_left)
         if val is not None and val != self.lo_selector.get_available():
             self.lo_selector.set_available(val)
+        val = self.__get_value("location_order_selected", top_left)
+        if val is not None and val != self.lo_selector.get_selected():
+            self.lo_selector.set_selected(val)
+            self._data_model.rank_order_score("state", val, "location_score")
+            self._data_model.standard_ordering()
         # Term emphasis selectors
         kw_val_map = {}
         for value, selector in self.te_selectors.items():
+            val = self.__get_value(f"terms_available_{str(value)}", top_left)
+            if val is not None and val != selector.get_available():
+                selector.set_available(val)
             val = self.__get_value(f"terms_selected_{str(value)}", top_left)
             if val is not None and val != selector.get_selected():
                 selector.set_selected(val)
                 kw_val_map[value] = val
-            val = self.__get_value(f"terms_available_{str(value)}", top_left)
-            if val is not None and val != selector.get_available():
-                selector.set_available(val)
         if kw_val_map:
-            self._sort_model.update_keyword_sort(kw_val_map)
+            self._data_model.keyword_score(kw_val_map, inplace=True)
+            self._data_model.standard_ordering()

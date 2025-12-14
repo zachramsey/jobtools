@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
-from .models import ConfigModel, SortFilterModel
+from .models import ConfigModel, JobsDataModel
 from .views import (RunnerPage, CollectPage, FilterPage, SortPage,
                     DataPage, ConsolePage, SettingsPage)
 from .utils import get_resource_dir, get_icon, get_sys_theme
@@ -68,14 +68,14 @@ class JobToolsApp(QMainWindow):
 
         # Initialize the config model
         cfg_model = ConfigModel()
-        sort_filter_model = SortFilterModel()
+        data_model = JobsDataModel()
 
         # Create and add pages
-        runner_page = RunnerPage(cfg_model)
-        collect_page = CollectPage(cfg_model, sort_filter_model)
-        filter_page = FilterPage(cfg_model, sort_filter_model)
-        sort_page = SortPage(cfg_model, sort_filter_model)
-        data_page = DataPage(cfg_model, sort_filter_model)
+        runner_page = RunnerPage(cfg_model, data_model)
+        collect_page = CollectPage(cfg_model, data_model)
+        filter_page = FilterPage(cfg_model, data_model)
+        sort_page = SortPage(cfg_model, data_model)
+        data_page = DataPage(cfg_model, data_model)
         console_page = ConsolePage()
         settings_page = SettingsPage()
         self.add_page(data_page, "data", "table_chart")

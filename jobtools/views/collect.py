@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QRadioButton, QLineEdit, QSpinBox)
 from PySide6.QtCore import QModelIndex, Qt, Signal, Slot
-from ..models import ConfigModel, SortFilterModel
+from ..models import ConfigModel, JobsDataModel
 from .widgets import QHeader, QPlainTextListEdit, QChipSelect
 
 
@@ -100,11 +100,11 @@ class DataSourceSelector(QWidget):
 
 
 class CollectPage(QWidget):
-    def __init__(self, config_model: ConfigModel, sort_model: SortFilterModel):
+    def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
-        self._sort_model = sort_model
+        self._data_model = data_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
         
@@ -217,7 +217,8 @@ class CollectPage(QWidget):
         val = self.__get_value("sites_selected", top_left)
         if val is not None and val != self.s_selector.get_selected():
             self.s_selector.set_selected(val)
-            self._sort_model.update_site_sort(val)
+            self._data_model.rank_order_score("site", val, "site_score")
+            self._data_model.standard_ordering()
         val = self.__get_value("sites_available", top_left)
         if val is not None and val != self.s_selector.get_available():
             self.s_selector.set_available(val)

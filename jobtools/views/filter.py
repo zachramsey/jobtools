@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import QModelIndex, Qt, Slot
 from jobspy.model import JobType    # type: ignore
 from .widgets import QHeader, QChipSelect, QCheckBoxSelect
-from ..models import ConfigModel, SortFilterModel
+from ..models import ConfigModel, JobsDataModel
 
 
 WM_TT = """Select which work models to include in results.\n
@@ -35,11 +35,11 @@ Accepts single words, multi-word phrases, and regular expressions."""
     
 
 class FilterPage(QWidget):
-    def __init__(self, config_model: ConfigModel, filter_model: SortFilterModel):
+    def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
-        self._filter_model = filter_model
+        self._data_model = data_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
 
@@ -154,46 +154,51 @@ class FilterPage(QWidget):
             if val != self.wm_selector.get_selected():
                 self.wm_selector.set_selected(val)
             val = [wm.upper() == "remote" for wm in val]
-            self._filter_model.setRowFilter("is_remote", "exact", val)
+            self._data_model.filter_data("is_remote", val)
+        
         # Job type selector
         val = self.__get_value("job_types", top_left)
         if val is not None:
             if val != self.jt_selector.get_selected():
                 self.jt_selector.set_selected(val)
-            self._filter_model.setRowFilter("job_type", "regex", val)
+            self._data_model.filter_data("job_type", val)
+        
         # Title exclude editor
+        val = self.__get_value("title_exclude_available", top_left)
+        if val is not None and val != self.te_editor.get_available():
+            self.te_editor.set_available(val)
         val = self.__get_value("title_exclude_selected", top_left)
         if val is not None:
             if val != self.te_editor.get_selected():
                 self.te_editor.set_selected(val)
-            self._filter_model.setRowFilter("title", "regex", val, invert=True)
-        val = self.__get_value("title_exclude_available", top_left)
-        if val is not None and val != self.te_editor.get_available():
-            self.te_editor.set_available(val)
+            self._data_model.filter_data("title", val, invert=True)
+        
         # Title require editor
+        val = self.__get_value("title_require_available", top_left)
+        if val is not None and val != self.tr_editor.get_available():
+            self.tr_editor.set_available(val)
         val = self.__get_value("title_require_selected", top_left)
         if val is not None:
             if val != self.tr_editor.get_selected():
                 self.tr_editor.set_selected(val)
-            self._filter_model.setRowFilter("title", "regex", val)
-        val = self.__get_value("title_require_available", top_left)
-        if val is not None and val != self.tr_editor.get_available():
-            self.tr_editor.set_available(val)
+            self._data_model.filter_data("title", val)
+        
         # Description exclude editor
+        val = self.__get_value("descr_exclude_available", top_left)
+        if val is not None and val != self.de_editor.get_available():
+            self.de_editor.set_available(val)
         val = self.__get_value("descr_exclude_selected", top_left)
         if val is not None:
             if val != self.de_editor.get_selected():
                 self.de_editor.set_selected(val)
-            self._filter_model.setRowFilter("description", "regex", val, invert=True)
-        val = self.__get_value("descr_exclude_available", top_left)
-        if val is not None and val != self.de_editor.get_available():
-            self.de_editor.set_available(val)
+            self._data_model.filter_data("description", val, invert=True)
+        
         # Description require editor
+        val = self.__get_value("descr_require_available", top_left)
+        if val is not None and val != self.dr_editor.get_available():
+            self.dr_editor.set_available(val)
         val = self.__get_value("descr_require_selected", top_left)
         if val is not None:
             if val != self.dr_editor.get_selected():
                 self.dr_editor.set_selected(val)
-            self._filter_model.setRowFilter("description", "regex", val)
-        val = self.__get_value("descr_require_available", top_left)
-        if val is not None and val != self.dr_editor.get_available():
-            self.dr_editor.set_available(val)
+            self._data_model.filter_data("description", val)

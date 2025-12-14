@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QTableView, QComboBox, QPushButton,
                                QHeaderView, QStyledItemDelegate)
 from .widgets import QHeader
-from ..models import ConfigModel, JobsDataModel, SortFilterModel
+from ..models import ConfigModel, JobsDataModel
 from ..utils import get_data_dir, get_data_sources, ThemeColor, blend_colors
 
 
@@ -56,26 +56,14 @@ class DataPage(QWidget):
 
     def __init__(self,
                  config_model: ConfigModel,
-                 sort_filter_model: SortFilterModel):
+                 data_model: JobsDataModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
-        self._data_model: JobsDataModel | None = None
         self._config_model = config_model
-        self._sort_filter_model = sort_filter_model
+        self._data_model = data_model
 
         # Initialize data model with dummy data
         self._setup_data_model(get_data_dir() / "dummy_jobs_data.csv")
-
-        # Setup proxy model
-        self._sort_filter_model.setSortRole(Qt.ItemDataRole.EditRole)
-        self._sort_filter_model.setDynamicSortFilter(True)
-        self._sort_filter_model.setSortCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive) 
-        self._sort_filter_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self._sort_filter_model.setSourceModel(self._data_model)    # type: ignore
-        self._sort_filter_model.setColumnFilter(UNUSED_COLUMNS)
-        self._sort_filter_model.setSortColumnMap({"state": "location_score",
-                                                  "keywords": "keyword_score"})
-        self._sort_filter_model.registerDelegate("site", "job_url", Qt.ItemDataRole.UserRole + 1)
 
         # Data source selector
         self.layout().addWidget(QHeader("Data Source"))
@@ -83,9 +71,9 @@ class DataPage(QWidget):
         self.data_selector = QComboBox()
         self.data_selector.setFixedWidth(300)
         data_sources = get_data_sources()
+        self.data_selector.addItem("Select Data Source...", Path())
         for name, path in data_sources.items():
             self.data_selector.addItem(name, path)
-        self.data_selector.setCurrentIndex(1)
         data_selector_layout.addWidget(self.data_selector)
         self.data_load = QPushButton("Load Data")
         self.data_load.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -96,7 +84,7 @@ class DataPage(QWidget):
 
         # Data table view
         self.table_view = QTableView()
-        self.table_view.setModel(self._sort_filter_model)
+        self.table_view.setModel(self._data_model)
         self.table_view.setSortingEnabled(True)
         self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
         self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignVCenter)

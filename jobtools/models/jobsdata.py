@@ -69,35 +69,100 @@ class JobsDataModel(QAbstractTableModel):
         
         if isinstance(data, pd.DataFrame):
             self._df = data.copy()
+            if len(self._df) > 0:
+                self.__preprocess()
+            self._dyn_df = self._df.copy()
+            self._logger.info(f"Initialized {len(self._df)} jobs from DataFrame.")
         else:
-            # Determine full path based on source
-            path = Path()
-            if isinstance(data, str):
-                if data == "archive":
-                    # Use archive data path
-                    path = get_data_dir() / "archive" / "jobs_data.csv"
-                elif data == "latest":
-                    # Find most recent day-wise subdirectory
-                    data_paths = get_data_sources()
-                    del data_paths["Archive"]
-                    path = data_paths[max(data_paths.keys())]
-            elif isinstance(data, Path):
-                # Use specified directory
-                path = data if data.is_absolute() else get_data_dir() / data
-                # If path is a directory, get jobs_data.csv within it
-                if path.is_dir():
-                    path = path / "jobs_data.csv"
-            # Validate data source path
-            if not path.exists():
-                raise FileNotFoundError(f"Could not find existing data at {path}")
-            # Load existing data
-            self._df = pd.read_csv(path)
-            self._load_path = path.parent
-            self._logger.info(f"Loaded {len(self._df)} jobs from {path}")
+            self.load_data(data)
 
-        # Preprocess existing data
-        if len(self._df) > 0:
-            self.__preprocess()
+        # Sorting state
+        self._sort_column = ""
+        self._sort_order = Qt.SortOrder.AscendingOrder
+
+    #################################
+    ## QAbstractTableModel Methods ##
+    #################################
+        
+    @property
+    def columns(self) -> list[str]:
+        return self._df.columns.tolist()
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return self._df.shape[0]
+    
+    def columnCount(self, parent=QModelIndex()) -> int:
+        return self._df.shape[1]
+    
+    def columnIndex(self, column_name: str) -> int:
+        return int(self._df.columns.get_loc(column_name))  # type: ignore
+    
+    def data(self, index, role):
+        if not index.isValid():
+            return None
+        val = self._df.iloc[index.row(), index.column()]
+        try:
+            val = val.item()
+        except AttributeError:
+            pass
+        if role == Qt.ItemDataRole.DisplayRole:
+            return str(val)
+        elif role == Qt.ItemDataRole.EditRole:
+            return val
+        return None
+    
+    def headerData(self, section, orientation, role):
+        if role == Qt.ItemDataRole.DisplayRole:
+            if orientation == Qt.Orientation.Horizontal:
+                return str(self._df.columns[section])
+            elif orientation == Qt.Orientation.Vertical:
+                return str(self._df.index[section])
+        return None
+    
+    def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
+        self._sort_column = self._df.columns[column]
+        self._sort_order = order
+        self.layoutAboutToBeChanged.emit()
+        self.__apply_sort()
+        self.layoutChanged.emit()
+
+    def __apply_sort(self):
+        if self._sort_column is not None:
+            ascending = self._sort_order == Qt.SortOrder.AscendingOrder
+            self._df.sort_values(by=self._sort_column,
+                                 ascending=ascending,
+                                 inplace=True,
+                                 ignore_index=True)
+            
+    def filter_data(self,
+                    column: str,
+                    expression: list[str]|str|bool|int|float|pd.Series|Callable,
+                    invert: bool = False):
+        """ Filter data based on the specified expression in the given column.
+
+        Parameters
+        ----------
+        column : str
+            Name of the source column to search.
+        expression : list[str]|str|bool|int|float|pd.Series|Callable
+            Expression defining the terms or matches to search for.
+
+            *See `JobsData.exists()` for details on supported types.*
+        invert : bool, optional
+            If True, invert the filter to exclude matching rows.
+        """
+        self.beginResetModel()
+        mask = self.exists(column, expression)
+        if invert:
+            mask = ~mask
+        self._dyn_df = self._df[mask].copy()
+        self._apply_sort()
+        self.endResetModel()
+
+
+    #################################
+    ##         Data Access         ##
+    #################################
 
     def __len__(self) -> int:
         """ Get the number of collected job postings. """
@@ -145,65 +210,6 @@ class JobsDataModel(QAbstractTableModel):
             Logging level (e.g., "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL").
         """
         cls._logger.set_level(level)
-
-    def update(self, other):
-        """ Update this `JobsData` instance with another `JobsData` or DataFrame. """
-        if isinstance(other, JobsDataModel):
-            self._df = pd.concat([self._df, other._df], ignore_index=True)
-        elif isinstance(other, pd.DataFrame):
-            self._df = pd.concat([self._df, other], ignore_index=True)
-        else:
-            raise TypeError(f"Unsupported type for update with JobsData: {type(other)}")
-        self._df.reset_index(drop=True, inplace=True)
-
-    #################################
-    ## QAbstractTableModel Methods ##
-    #################################
-        
-    @property
-    def columns(self) -> list[str]:
-        return self._df.columns.tolist()
-
-    def rowCount(self, parent=QModelIndex()) -> int:
-        return self._df.shape[0]
-    
-    def columnCount(self, parent=QModelIndex()) -> int:
-        return self._df.shape[1]
-    
-    def columnIndex(self, column_name: str) -> int:
-        return int(self._df.columns.get_loc(column_name))  # type: ignore
-    
-    def data(self, index, role):
-        if index.isValid():
-            val = self._df.iloc[index.row(), index.column()]
-            try:
-                val = val.item()
-            except AttributeError:
-                pass
-            if role == Qt.ItemDataRole.DisplayRole:
-                return str(val)
-            elif role == Qt.ItemDataRole.EditRole:
-                return val
-        return None
-    
-    def headerData(self, section, orientation, role):
-        if role == Qt.ItemDataRole.DisplayRole:
-            if orientation == Qt.Orientation.Horizontal:
-                return str(self._df.columns[section])
-            # elif orientation == Qt.Orientation.Vertical:
-            #     return str(self._jobs._df.index[section])
-        return None
-    
-    def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
-        col_name = self._df.columns[column]
-        self.layoutAboutToBeChanged.emit()
-        try:
-            self._df.sort_values(by=col_name,
-                                 ascending=(order == Qt.SortOrder.AscendingOrder),
-                                 inplace=True)
-        except Exception as e:
-            self._logger.warning(f"Failed to sort by column '{col_name}': {e}")
-        self.layoutChanged.emit()
     
     #################################
     ##       Data Collection       ##
@@ -224,6 +230,8 @@ class JobsDataModel(QAbstractTableModel):
         # # Standardize column order
         # existing_cols = [col for col in COLUMN_ORDER if col in self._df.columns]
         # self._df = self._df.reindex(columns=existing_cols)
+        # Remove duplicate job postings
+        self.drop_duplicate_jobs()
 
     @staticmethod
     def __scrape_jobs_worker(queue: mp.Queue, kwargs: dict):
@@ -335,10 +343,80 @@ class JobsDataModel(QAbstractTableModel):
         self._modified = True
         self.logger.info(f"Collected {len(self._df) - n_init} new jobs.")
         return len(self._df) - n_init
+    
+    def load_data(self, source: Path | str):
+        """ Load job data from a CSV file.
+
+        Parameters
+        ----------
+        source : Path | str
+            Data source to load from.
+            - *Path* : load data from the specified CSV file or directory.
+            - *"latest"* : load data from the most recent run.
+            - *"archive"* : load data from the archive data path.
+        """
+        path = Path()
+        if isinstance(source, str):
+            if source == "archive":
+                # Use archive data path
+                path = get_data_dir() / "archive" / "jobs_data.csv"
+            elif source == "latest":
+                # Find most recent day-wise subdirectory
+                data_paths = get_data_sources()
+                del data_paths["Archive"]
+                path = data_paths[max(data_paths.keys())]
+        elif isinstance(source, Path):
+            # Use specified directory
+            path = source if source.is_absolute() else get_data_dir() / source
+            # If path is a directory, get jobs_data.csv within it
+            if path.is_dir():
+                path = path / "jobs_data.csv"
+        if not path.exists():
+            raise FileNotFoundError(f"Could not find data file at {path}")
+        self._df = pd.read_csv(path)
+        self._load_path = path.parent
+        self.__preprocess()
+        self._dyn_df = self._df.copy()
+        self._modified = False
+        self.logger.info(f"Loaded {len(self._df)} jobs from {path}")
+
+    def update(self, other):
+        """ Update this `JobsData` instance with another `JobsData` or DataFrame. """
+        if isinstance(other, JobsDataModel):
+            self._df = pd.concat([self._df, other._df], ignore_index=True)
+        elif isinstance(other, pd.DataFrame):
+            self._df = pd.concat([self._df, other], ignore_index=True)
+        else:
+            raise TypeError(f"Unsupported type for update with JobsData: {type(other)}")
+        self._df.reset_index(drop=True, inplace=True)
 
     #################################
-    ##       Data Processing       ##
+    ##       Filtering Tools       ##
     #################################
+
+    def drop_duplicate_jobs(self) -> int:
+        """ Remove duplicate job postings. Keeps the first occurrence.
+
+        Sorting jobs in descending order of preference before calling
+        this method is recommended to retain the most relevant postings.
+
+        Returns
+        -------
+        int
+            number of duplicates removed.
+        """
+        n_init = len(self._df)
+        # Drop duplicates with the same job board identifier
+        self._df.drop_duplicates(subset=["id"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates pointing to the same direct job URL
+        self._df.drop_duplicates(subset=["job_url_direct"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates with the same company and title
+        self._df.drop_duplicates(subset=["company", "title"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates with the same title and description
+        self._df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
+        self._modified = True
+        self.logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
+        return n_init - len(self._df)
 
     def exists(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
         """ Create a boolean mask indicating which rows match the specified expression.
@@ -396,12 +474,7 @@ class JobsDataModel(QAbstractTableModel):
         expression : list[str]|str|bool|int|float|pd.Series|Callable
             Expression defining the terms or matches to search for.
 
-            *Supported types:*
-            - *string or list[str] -> regex matching*
-            - *bool/int/float -> direct equality (useful for boolean columns)*
-            - *list/tuple/set of scalars -> .isin() matching*
-            - *pd.Series (boolean mask) -> reindex/align to stored DataFrame*
-            - *Callable -> custom mask builder: Callable(series) -> boolean Series*
+            *See `JobsData.exists()` for details on supported types.*
 
         Returns
         -------
@@ -424,12 +497,7 @@ class JobsDataModel(QAbstractTableModel):
         expression : list[str]|str|bool|int|float|pd.Series|Callable
             Expression defining the terms or matches to search for.
 
-            *Supported types:*
-            - *string or list[str] -> regex matching*
-            - *bool/int/float -> direct equality (useful for boolean columns)*
-            - *list/tuple/set of scalars -> .isin() matching*
-            - *pd.Series (boolean mask) -> reindex/align to stored DataFrame*
-            - *Callable -> custom mask builder: Callable(series) -> boolean Series*
+            *See `JobsData.exists()` for details on supported types.*
 
         Returns
         -------
@@ -441,6 +509,10 @@ class JobsDataModel(QAbstractTableModel):
         self._modified = True
         self.logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` requirement filter.")
         return n_init - len(self._df)
+    
+    #################################
+    ##        Sorting Tools        ##
+    #################################
 
     def degree_score(self,
                      degree_values: tuple[int, int, int],
@@ -554,8 +626,7 @@ class JobsDataModel(QAbstractTableModel):
         """
         self._df.sort_values(by=["date_posted", "location_score", "degree_score",
                                  "keyword_score", "site_score"],
-                             ascending=False, inplace=True)
-        self._df.reset_index(drop=True, inplace=True)
+                             ascending=False, inplace=True, ignore_index=True)
         
     def prioritize(self,
                    state_rank_order: list[str],
@@ -589,38 +660,6 @@ class JobsDataModel(QAbstractTableModel):
         if drop_intermediate:
             self._df.drop(columns=["location_score", "degree_score", "keyword_score",
                                    "keywords", "site_score"], inplace=True)
-
-    def drop_duplicate_jobs(self) -> int:
-        """ Remove duplicate job postings. Keeps the first occurrence.
-
-        Sorting jobs in descending order of preference before calling
-        this method is recommended to retain the most relevant postings.
-
-        Returns
-        -------
-        int
-            number of duplicates removed.
-        """
-        n_init = len(self._df)
-        # Drop duplicates with the same job board identifier
-        self._df.drop_duplicates(subset=["id"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates pointing to the same direct job URL
-        self._df.drop_duplicates(subset=["job_url_direct"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates with the same company and title
-        self._df.drop_duplicates(subset=["company", "title"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates with the same title and description
-        self._df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
-        self._df.reset_index(drop=True, inplace=True)
-        self._modified = True
-        self.logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
-        return n_init - len(self._df)
-    
-    def drop_empty_cols(self):
-        """ Drop columns that contain only NaN or empty values. """
-        for col in self._df.columns:
-            if self._df[col].replace("", pd.NA).isna().all():
-                self._df.drop(columns=[col], inplace=True)
-        self._modified = True
     
     ################################
     ##       Data Exporting       ##

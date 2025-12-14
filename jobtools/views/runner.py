@@ -1,8 +1,10 @@
 import os
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox
-from PySide6.QtCore import Qt, QModelIndex, Slot
+from PySide6.QtCore import Qt, QModelIndex, Slot, QObject, Signal, QThread
+from threading import Event
+import traceback
 from .widgets import QHeader
-from ..models import ConfigModel, collect_jobs
+from ..models import ConfigModel, JobsDataModel
 from ..utils import get_config_dir
 
 
@@ -11,13 +13,70 @@ SC_TT = """"""
 LC_TT = """"""
 
 
+class CollectionWorker(QObject):
+    """ Worker for running job data collection in a separate thread. """
+
+    finished = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, data_model: JobsDataModel, config: dict, cancel_event: Event):
+        super().__init__()
+        self._data_model = data_model
+        self._config = config.get("collect", {})
+        self._cancel_event = cancel_event
+
+    @Slot()
+    def run(self):
+        """ Run the job data collection process.
+
+        Yields
+        ------
+        finished : str
+            Emitted with the path to the generated CSV file upon completion.
+        error : str
+            Emitted with the error message if an exception occurs.
+        """
+        try:
+            # Initialize JobsData
+            self._data_model.load_data(self._config.get("data_source", ""))
+            self._data_model.logger.info("Starting job collection...")
+            # Run collection and sorting for each query
+            for query in self._config.get("queries", []):
+                # Job collection
+                _ = self._data_model.collect(
+                    site_name=self._config.get("sites_selected", []),
+                    search_term=query,
+                    job_type=None,  # type: ignore
+                    locations=self._config.get("locations_selected", []),
+                    results_wanted=10000, # TODO: Make arbitrarily large "maximum" value configurable
+                    proxy=self._config.get("proxy", ""),
+                    hours_old=self._config.get("hours_old", 0),
+                    cancel_event=self._cancel_event
+                )
+                # Check for cancellation
+                if self._cancel_event and self._cancel_event.is_set():
+                    self._data_model.logger.info("Job collection cancelled by user.")
+                    break
+                # Remove trivial duplicates
+                self._data_model.deduplicate()
+                # Save intermediate CSV
+                csv_path = self._data_model.export_csv()
+            if self._cancel_event and self._cancel_event.is_set():
+                # Skip further processing if cancelled
+                self.finished.emit("")
+                return
+            self.finished.emit(csv_path)
+        except Exception:
+            self.error.emit(traceback.format_exc())
+
+
 class RunnerPage(QWidget):
     """ Page for running JobTools operations. """
 
-    def __init__(self, config_model: ConfigModel):
+    def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
         self._config_model = config_model
-        self._config_dir = get_config_dir()
+        self._data_model = data_model
         self.setLayout(QVBoxLayout(self))
 
         # Load configuration
@@ -69,7 +128,7 @@ class RunnerPage(QWidget):
         if not config_name:
             return
         config_name = config_name.replace(" ", "_").lower()
-        config_path = os.path.join(self._config_dir, f"{config_name}.json")
+        config_path = os.path.join(get_config_dir(), f"{config_name}.json")
         self._config_model.load_from_file(config_path)
         self._config_model.dataChanged.emit(QModelIndex(), QModelIndex())
         # Update config edit box
@@ -82,7 +141,7 @@ class RunnerPage(QWidget):
         if not config_name:
             return
         config_name = config_name.replace(" ", "_").lower()
-        config_path = os.path.join(self._config_dir, f"{config_name}.json")
+        config_path = os.path.join(get_config_dir(), f"{config_name}.json")
         self._config_model.save_to_file(config_path)
         # Update config selector
         temp = self.config_select.currentText()
@@ -100,9 +159,22 @@ class RunnerPage(QWidget):
             self.run.style().unpolish(self.run)
             self.run.style().polish(self.run)
             # Setup data collection worker
-            self._cancel_event = collect_jobs(self._config_model.get_config_dict(),
-                                              self._on_collection_finished,
-                                              self._on_collection_error)
+            self._cancel_event = Event()
+            worker_thread = QThread()
+            worker = CollectionWorker(self._data_model,
+                                      self._config_model.get_config_dict(),
+                                      self._cancel_event)
+            worker.moveToThread(worker_thread)
+            # Connect signals and slots
+            worker_thread.started.connect(worker.run)
+            worker_thread.finished.connect(worker_thread.deleteLater)
+            worker.finished.connect(worker_thread.quit)
+            worker.finished.connect(worker.deleteLater)
+            # Connect worker signals to callbacks
+            worker.finished.connect(self._on_collection_finished)
+            worker.error.connect(self._on_collection_error)
+            # Start thread
+            worker_thread.start()
         else:
             # Signal cancellation
             if self._cancel_event:
