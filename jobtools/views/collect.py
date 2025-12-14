@@ -209,10 +209,12 @@ class CollectPage(QWidget):
         val = self.__get_value("proxy", top_left)
         if val is not None and val != self.p_editor.text().strip():
             self.p_editor.setText(val)
+
         # Data source
         val = self.__get_value("data_source", top_left)
         if val is not None and val != self.ds_selector.get_source():
             self.ds_selector.set_source(val)
+
         # Sites
         val = self.__get_value("sites_selected", top_left)
         if val is not None and val != self.s_selector.get_selected():
@@ -222,6 +224,7 @@ class CollectPage(QWidget):
         val = self.__get_value("sites_available", top_left)
         if val is not None and val != self.s_selector.get_available():
             self.s_selector.set_available(val)
+
         # Locations
         val = self.__get_value("locations_selected", top_left)
         if val is not None and val != self.l_editor.get_selected():
@@ -229,10 +232,12 @@ class CollectPage(QWidget):
         val = self.__get_value("locations_available", top_left)
         if val is not None and val != self.l_editor.get_available():
             self.l_editor.set_available(val)
+
         # Queries
         val = self.__get_value("queries", top_left)
         if val is not None and val != self.q_editor.get_items():
             self.q_editor.set_items(val)
+
         # Hours old
         val = self.__get_value("hours_old", top_left)
         if val is not None and val != self.h_editor.value():

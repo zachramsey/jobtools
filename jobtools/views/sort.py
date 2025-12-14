@@ -244,6 +244,7 @@ class SortPage(QWidget):
             self.dv_selector.set_values(*val)
             self._data_model.degree_score(val, inplace=True)
             self._data_model.standard_ordering()
+
         # Location order
         val = self.__get_value("location_order_available", top_left)
         if val is not None and val != self.lo_selector.get_available():
@@ -253,6 +254,7 @@ class SortPage(QWidget):
             self.lo_selector.set_selected(val)
             self._data_model.rank_order_score("state", val, "location_score")
             self._data_model.standard_ordering()
+
         # Term emphasis selectors
         kw_val_map = {}
         for value, selector in self.te_selectors.items():

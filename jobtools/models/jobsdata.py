@@ -68,44 +68,59 @@ class JobsDataModel(QAbstractTableModel):
         self._modified = False
         
         if isinstance(data, pd.DataFrame):
+            self.beginResetModel()
             self._df = data.copy()
             if len(self._df) > 0:
                 self.__preprocess()
             self._dyn_df = self._df.copy()
+            self.endResetModel()
             self._logger.info(f"Initialized {len(self._df)} jobs from DataFrame.")
         else:
             self.load_data(data)
 
         # Sorting state
-        self._sort_column = ""
+        self.columns = self._df.columns.tolist()
+        self._sort_column = None
         self._sort_order = Qt.SortOrder.AscendingOrder
+        self._filter_masks: dict[str, pd.Series] = {}
 
     #################################
     ## QAbstractTableModel Methods ##
     #################################
-        
-    @property
-    def columns(self) -> list[str]:
-        return self._df.columns.tolist()
+
+    def set_visible_columns(self, columns: list[str]):
+        """ Set the visible columns in the data model.
+
+        Parameters
+        ----------
+        columns : list[str]
+            List of column names to set as visible.
+        """
+        self.beginResetModel()
+        self.columns = columns
+        self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()) -> int:
-        return self._df.shape[0]
+        return self._dyn_df.shape[0]
     
     def columnCount(self, parent=QModelIndex()) -> int:
-        return self._df.shape[1]
+        return len(self.columns)
     
     def columnIndex(self, column_name: str) -> int:
-        return int(self._df.columns.get_loc(column_name))  # type: ignore
+        return int(self.columns.index(column_name))
     
     def data(self, index, role):
         if not index.isValid():
             return None
-        val = self._df.iloc[index.row(), index.column()]
+        col = self.columns[index.column()]
+        val = self._dyn_df[col].iloc[index.row()]
         try:
             val = val.item()
         except AttributeError:
             pass
         if role == Qt.ItemDataRole.DisplayRole:
+            if isinstance(val, list):
+                return ", ".join(str(v) for v in val)
             return str(val)
         elif role == Qt.ItemDataRole.EditRole:
             return val
@@ -114,13 +129,13 @@ class JobsDataModel(QAbstractTableModel):
     def headerData(self, section, orientation, role):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                return str(self._df.columns[section])
+                return self.columns[section]
             elif orientation == Qt.Orientation.Vertical:
-                return str(self._df.index[section])
+                return str(self._dyn_df.index[section])
         return None
     
     def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
-        self._sort_column = self._df.columns[column]
+        self._sort_column = self.columns[column]    # type: ignore
         self._sort_order = order
         self.layoutAboutToBeChanged.emit()
         self.__apply_sort()
@@ -155,10 +170,19 @@ class JobsDataModel(QAbstractTableModel):
         mask = self.exists(column, expression)
         if invert:
             mask = ~mask
-        self._dyn_df = self._df[mask].copy()
-        self._apply_sort()
+        self._filter_masks[column] = mask
+        self.__apply_filters()
+        self.__apply_sort()
         self.endResetModel()
 
+    def __apply_filters(self):
+        if self._filter_masks:
+            combined_mask = pd.Series(True, index=self._df.index)
+            for m in self._filter_masks.values():
+                combined_mask &= m
+            self._dyn_df = self._df[combined_mask].reset_index(drop=True)
+        else:
+            self._dyn_df = self._df.copy()
 
     #################################
     ##         Data Access         ##
@@ -283,9 +307,10 @@ class JobsDataModel(QAbstractTableModel):
             cancel_check = cancel_event.is_set
         # Collect jobs for each location
         n_init = len(self._df)
+        self.beginResetModel()
         for location in locations:
             if cancel_check():
-                self.logger.info("Job collection cancelled before next location.")
+                self._logger.info("Job collection cancelled before next location.")
                 break
             # Scrape jobs for this location and search terms
             kwargs = dict(site_name=site_name,
@@ -305,7 +330,7 @@ class JobsDataModel(QAbstractTableModel):
             # Monitor process for cancellation
             while p.is_alive():
                 if cancel_check():
-                    self.logger.info("Job collection cancelled: terminating worker process.")
+                    self._logger.info("Job collection cancelled: terminating worker process.")
                     p.terminate()
                     p.join()
                     break
@@ -315,11 +340,11 @@ class JobsDataModel(QAbstractTableModel):
             try:
                 result = q.get_nowait()
                 if isinstance(result, Exception):
-                    self.logger.warning(f"Collection worker raised an exception: {result}")
+                    self._logger.warning(f"Collection worker raised an exception: {result}")
                 else:
                     jobs = result
             except Exception as e:
-                self.logger.warning(f"Failed to get results from collection worker: {e}")
+                self._logger.warning(f"Failed to get results from collection worker: {e}")
             # Cancellation mid-scrape
             if cancel_check():
                 break
@@ -339,9 +364,13 @@ class JobsDataModel(QAbstractTableModel):
                          if isinstance(html, str) and len(html) > 0 else html)
         # Preprocess collected data
         self.__preprocess()
+        self._dyn_df = self._df.copy()
+        self.__apply_filters()
+        self.__apply_sort()
+        self.endResetModel()
         # Mark data as modified
         self._modified = True
-        self.logger.info(f"Collected {len(self._df) - n_init} new jobs.")
+        self._logger.info(f"Collected {len(self._df) - n_init} new jobs.")
         return len(self._df) - n_init
     
     def load_data(self, source: Path | str):
@@ -373,15 +402,20 @@ class JobsDataModel(QAbstractTableModel):
                 path = path / "jobs_data.csv"
         if not path.exists():
             raise FileNotFoundError(f"Could not find data file at {path}")
+        self.beginResetModel()
         self._df = pd.read_csv(path)
         self._load_path = path.parent
         self.__preprocess()
         self._dyn_df = self._df.copy()
+        self.__apply_filters()
+        self.__apply_sort()
+        self.endResetModel()
         self._modified = False
-        self.logger.info(f"Loaded {len(self._df)} jobs from {path}")
+        self._logger.info(f"Loaded {len(self._df)} jobs from {path}")
 
     def update(self, other):
         """ Update this `JobsData` instance with another `JobsData` or DataFrame. """
+        self.beginResetModel()
         if isinstance(other, JobsDataModel):
             self._df = pd.concat([self._df, other._df], ignore_index=True)
         elif isinstance(other, pd.DataFrame):
@@ -389,6 +423,12 @@ class JobsDataModel(QAbstractTableModel):
         else:
             raise TypeError(f"Unsupported type for update with JobsData: {type(other)}")
         self._df.reset_index(drop=True, inplace=True)
+        self.__preprocess()
+        self._dyn_df = self._df.copy()
+        self.__apply_filters()
+        self.__apply_sort()
+        self.endResetModel()
+        self._modified = True
 
     #################################
     ##       Filtering Tools       ##
@@ -415,7 +455,7 @@ class JobsDataModel(QAbstractTableModel):
         # Drop duplicates with the same title and description
         self._df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
         self._modified = True
-        self.logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
+        self._logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
         return n_init - len(self._df)
 
     def exists(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
@@ -484,7 +524,7 @@ class JobsDataModel(QAbstractTableModel):
         n_init = len(self._df)
         self._df = self._df[~self.exists(column, expression)]
         self._modified = True
-        self.logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` rejection filter.")
+        self._logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` rejection filter.")
         return n_init - len(self._df)
 
     def select(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> int:
@@ -507,7 +547,7 @@ class JobsDataModel(QAbstractTableModel):
         n_init = len(self._df)
         self._df = self._df[self.exists(column, expression)]
         self._modified = True
-        self.logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` requirement filter.")
+        self._logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` requirement filter.")
         return n_init - len(self._df)
     
     #################################
@@ -538,6 +578,7 @@ class JobsDataModel(QAbstractTableModel):
         score += degree_values[2] * self._df["has_phd"].astype(int)
         if inplace:
             self._df["degree_score"] = score
+            self._dyn_df["degree_score"] = score
             return None
         else:
             return score
@@ -576,6 +617,8 @@ class JobsDataModel(QAbstractTableModel):
         if inplace:
             self._df["keyword_score"] = score
             self._df["keywords"] = keywords
+            self._dyn_df["keyword_score"] = score
+            self._dyn_df["keywords"] = keywords
             return None
         else:
             return score, keywords
@@ -613,6 +656,7 @@ class JobsDataModel(QAbstractTableModel):
         scores = self._df[source_column].map(priority_map).fillna(0).astype(int)
         if target_column is not None:
             self._df[target_column] = scores
+            self._dyn_df[target_column] = scores
             return None
         else:
             return scores
@@ -651,15 +695,17 @@ class JobsDataModel(QAbstractTableModel):
         drop_intermediate : bool, optional
             Whether to drop intermediate scoring columns after prioritization.
         """
-        keyword_results = self.keyword_score(keyword_value_map)
-        self._df["location_score"] = self.rank_order_score("state", state_rank_order)
-        self._df["degree_score"] = self.degree_score(degree_values)
-        self._df["keyword_score"], self._df["keywords"] = keyword_results  # type: ignore
-        self._df["site_score"] = self.rank_order_score("site", site_rank_order)
+        self.keyword_score(keyword_value_map, inplace=True)
+        self.rank_order_score("state", state_rank_order, "location_score")
+        self.degree_score(degree_values, inplace=True)
+        self.rank_order_score("site", site_rank_order, "site_score")
         self.standard_ordering()
         if drop_intermediate:
             self._df.drop(columns=["location_score", "degree_score", "keyword_score",
                                    "keywords", "site_score"], inplace=True)
+            self._dyn_df.drop(columns=["location_score", "degree_score", "keyword_score",
+                                      "keywords", "site_score"], inplace=True)
+            
     
     ################################
     ##       Data Exporting       ##

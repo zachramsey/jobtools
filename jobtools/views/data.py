@@ -64,6 +64,10 @@ class DataPage(QWidget):
 
         # Initialize data model with dummy data
         self._setup_data_model(get_data_dir() / "dummy_jobs_data.csv")
+        self._data_model.set_visible_columns([
+            "date_posted", "state", "company", "title",
+            "has_ba", "has_ma", "has_phd", "keywords","site", 
+        ])
 
         # Data source selector
         self.layout().addWidget(QHeader("Data Source"))
@@ -106,8 +110,10 @@ class DataPage(QWidget):
     
     def _setup_data_model(self, data_path: Path):
         """ Setup the data model from the given data path. """
-        self._data_model = JobsDataModel(data_path)
-        sort_cfg = self._config_model.get_config_dict().get("sort", {})
+        self._data_model.load_data(data_path)
+        cfg = self._config_model.get_config_dict()
+        # Apply current sorting configuration
+        sort_cfg = cfg.get("sort", {})
         loc_order = sort_cfg.get("location_order_selected", [])
         deg_vals = sort_cfg.get("degree_values", [])
         kw_val_map = {int(terms_key.split("_")[-1]): sort_cfg[terms_key]
@@ -115,6 +121,21 @@ class DataPage(QWidget):
         site_order = sort_cfg.get("sites_selected", [])
         self._data_model.prioritize(loc_order, deg_vals, kw_val_map,
                                     site_order, drop_intermediate=False)
+        # Apply current filter configuration
+        filter_cfg = cfg.get("filter", {})
+        work_models = filter_cfg.get("work_models", [])
+        work_models = [wm.upper() == "remote" for wm in work_models]
+        self._data_model.filter_data("is_remote", work_models)
+        job_types = filter_cfg.get("job_types", [])
+        self._data_model.filter_data("job_type", job_types)
+        title_excl = filter_cfg.get("title_exclude_selected", [])
+        self._data_model.filter_data("title", title_excl, invert=True)
+        title_req = filter_cfg.get("title_require_selected", [])
+        self._data_model.filter_data("title", title_req)
+        descr_excl = filter_cfg.get("descr_exclude_selected", [])
+        self._data_model.filter_data("description", descr_excl, invert=True)
+        descr_req = filter_cfg.get("descr_require_selected", [])
+        self._data_model.filter_data("description", descr_req)
 
     @Slot(int)
     def _on_load_data_source(self):
