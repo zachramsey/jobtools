@@ -33,3 +33,13 @@ QPushButton.help-button {{
     font-family: "Roboto Mono", monospace;
     font-size: 12px;
 }}
+
+.data-table QHeaderView {{
+    font-weight: bold;
+    font-size: 13px;
+}}
+
+.data-table QHeaderView::section {{
+    padding-left: 15px;
+    padding-right: 15px;
+}}

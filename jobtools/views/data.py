@@ -1,9 +1,9 @@
 from pathlib import Path
 from PySide6.QtCore import Qt, Slot, QUrl
-from PySide6.QtGui import QPalette, QDesktopServices
+from PySide6.QtGui import QDesktopServices, QCursor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QTableView, QComboBox, QPushButton,
-                               QHeaderView, QStyledItemDelegate)
+                               QHeaderView)
 from .widgets import QHeader
 from ..models import ConfigModel, JobsDataModel
 from ..utils import get_data_dir, get_data_sources, ThemeColor, blend_colors
@@ -20,35 +20,21 @@ UNUSED_COLUMNS = ['id', 'job_url_direct', 'salary_source', 'interval',
                   'work_from_home_type', 'location', 'city']
 
 
-class HyperlinkDelegate(QStyledItemDelegate):
-    """ Delegate to render clickable hyperlinks in a QTableView. """
+class HoverTableView(QTableView):
+    def __init__(self):
+        super().__init__()
+        self.setMouseTracking(True)
 
-    def paint(self, painter, option, index):
-        """ Paint the cell with hyperlink style. """
-        painter.save()
-        url = index.data(Qt.ItemDataRole.UserRole + 1)
-        if url:
-            option.font.setUnderline(True)
-            link_color = option.palette.color(QPalette.ColorRole.Link)
-            painter.setPen(link_color)
-            painter.setFont(option.font)
-            painter.drawText(
-                option.rect,
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                index.data()
-            )
+    def mouseMoveEvent(self, event):
+        # Find which index the mouse is currently over
+        pos = event.position().toPoint()
+        index = self.indexAt(pos)
+        # Change cursor if hovering over a linkable cell
+        if index.isValid() and index.data(Qt.ItemDataRole.UserRole + 1):
+            self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         else:
-            super().paint(painter, option, index)
-        painter.restore()
-
-    def editorEvent(self, event, model, option, index):
-        """ Handle click events to open hyperlinks. """
-        if event.type() == event.Type.MouseButtonRelease:
-            url = index.data(Qt.ItemDataRole.UserRole + 1)
-            if url:
-                QDesktopServices.openUrl(QUrl(url))
-                return True
-        return super().editorEvent(event, model, option, index)
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+        super().mouseMoveEvent(event)
 
 
 class DataPage(QWidget):
@@ -68,6 +54,10 @@ class DataPage(QWidget):
             "date_posted", "state", "company", "title",
             "has_ba", "has_ma", "has_phd", "keywords","site", 
         ])
+        self._data_model.set_column_labels({
+            "date_posted": "Posted", "state": "Loc",
+            "has_ba": "BA", "has_ma": "MA", "has_phd": "PhD"
+        })
 
         # Data source selector
         self.layout().addWidget(QHeader("Data Source"))
@@ -87,21 +77,25 @@ class DataPage(QWidget):
         self.layout().addLayout(data_selector_layout)
 
         # Data table view
-        self.table_view = QTableView()
+        self.table_view = HoverTableView()
         self.table_view.setModel(self._data_model)
-        self.table_view.setSortingEnabled(True)
+        # self.table_view.setSortingEnabled(True)
         self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
         self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignVCenter)
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        # self.table_view.horizontalHeader().setStretchLastSection(True)
+        self.table_view.horizontalHeader().setProperty("class", "data-table")
+        self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.verticalHeader().setVisible(False)
         self.table_view.setAlternatingRowColors(True)
         bg_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY, 0.7)
         alt_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY_LIGHT, 0.7)
+        self.table_view.setProperty("class", "data-table")
         self.table_view.setStyleSheet(f"QTableView {{ background-color: {bg_color}; alternate-background-color: {alt_color}; }}")
         self.table_view.setShowGrid(False)
         self.table_view.setSelectionMode(QTableView.SelectionMode.NoSelection)
-        self.table_view.setItemDelegateForColumn(self._data_model.columnIndex("site"),  # type: ignore
-                                                 HyperlinkDelegate(self.table_view))
+        self.table_view.setWordWrap(True)
+        self.table_view.clicked.connect(self._on_open_job_url)
         self.layout().addWidget(self.table_view)
 
     def layout(self) -> QVBoxLayout:
@@ -143,4 +137,11 @@ class DataPage(QWidget):
         data_path = self.data_selector.currentData()
         if data_path.exists():
             self._setup_data_model(data_path)
+
+    @Slot()
+    def _on_open_job_url(self, index):
+        """ Open the job posting URL for the given model index. """
+        url = self._data_model.get_index_url(index)
+        if url:
+            QDesktopServices.openUrl(QUrl(url))
             
