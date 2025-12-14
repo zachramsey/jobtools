@@ -49,7 +49,7 @@ def get_data_sources() -> dict[str, Path]:
     sources = {}
     for date in data_dir.iterdir():
         if date.name == "archive":
-            sources["Archive"] = date
+            sources["Archive"] = date / "jobs_data.csv"
             continue
         if not date.name.isdigit() or len(date.name) != 8:
             continue
@@ -125,6 +125,33 @@ def get_color(color: QColor | ThemeColor | str) -> QColor:
         except ValueError:
             color = QColor(color)
     return color
+
+
+def blend_colors(c1: QColor | ThemeColor | str,
+                 c2: QColor | ThemeColor | str,
+                 ratio: float = 0.5) -> str:
+    """ Blend two colors from the current theme.
+
+    Parameters
+    ----------
+    c1 : ThemeColor or str
+        The first color to blend.
+    c2 : ThemeColor or str
+        The second color to blend.
+    ratio : float, optional
+        The blend ratio for the first color (0.0 to 1.0). Default is 0.5.
+
+    Returns
+    -------
+    str
+        The blended color as a hex string.
+    """
+    color1 = get_color(c1)
+    color2 = get_color(c2)
+    r = int(color1.red() * ratio + color2.red() * (1 - ratio))
+    g = int(color1.green() * ratio + color2.green() * (1 - ratio))
+    b = int(color1.blue() * ratio + color2.blue() * (1 - ratio))
+    return f"#{r:02X}{g:02X}{b:02X}"
 
 
 def get_icon(icon_name: str, color: QColor | ThemeColor | str | None = None) -> QIcon:

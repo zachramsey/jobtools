@@ -8,9 +8,45 @@ class SortFilterModel(QSortFilterProxyModel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Set of idcs to be hidden
         self._col_filters = set()
-        self._sort_key_map = {}
+        # Mapping of idcs to filter (type, value) tuples
         self._row_filters = {}
+        # Mapping of view idcs to associated sorting key idcs
+        self._sort_key_map = {}
+        # Mapping of view idcs to associated delegate (idx, role) tuples
+        self._delegate_map = {}
+
+    ######################
+    ## Column Delegates ##
+    ######################
+
+    def registerDelegate(self, view_column, delegate_column, role):
+        """ Set a delegate for a specific column.
+
+        Parameters
+        ----------
+        view_column : int
+            The index of the column in the view.
+        delegate_column : int
+            The index of the column in the source model to delegate to.
+        role : Qt.ItemDataRole
+            The data role to use from the delegate column.
+        """
+        if not self.sourceModel():
+            return
+        view_idx = self.sourceModel().columnIndex(view_column)          # type: ignore
+        delegate_idx = self.sourceModel().columnIndex(delegate_column)  # type: ignore
+        self._delegate_map[view_idx] = (delegate_idx, role)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if index.column() in self._delegate_map:
+            delegate_idx, delegate_role = self._delegate_map[index.column()]
+            if role == delegate_role:
+                source_idx = self.mapToSource(index)
+                delegate_idx = source_idx.siblingAtColumn(delegate_idx)
+                return self.sourceModel().data(delegate_idx, Qt.ItemDataRole.DisplayRole)
+        return super().data(index, role)
 
     #####################
     ##  Column Filters ##
@@ -40,7 +76,8 @@ class SortFilterModel(QSortFilterProxyModel):
         if self._col_filters:
             is_filter = source_column in self._col_filters
             is_key = source_column in self._sort_key_map.values()
-            return not (is_filter or is_key)
+            is_delegate = source_column in [idx for idx, _ in self._delegate_map.values()]
+            return not (is_filter or is_key or is_delegate)
         return True
     
     #####################

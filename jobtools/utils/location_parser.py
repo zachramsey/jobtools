@@ -52,5 +52,4 @@ def parse_location(loc: str) -> tuple:
         city = parts[0].title()
         state_part = parts[1].lower()
         state = NAME_TO_ABBR.get(state_part, state_part).upper()
-    location = ", ".join(filter(None, [city, state]))
-    return city, state, location
+    return city, state

@@ -1,2 +1,3 @@
 configs/
-data/
+data/*
+!data/dummy_jobs_data.csv

@@ -1,5 +1,5 @@
 import datetime as dt
-from jobspy import scrape_jobs                      # type: ignore
+from jobspy import scrape_jobs, desired_order       # type: ignore
 from markdownify import MarkdownConverter           # type: ignore
 from markdownify import ATX, SPACES, UNDERSCORE     # type: ignore
 import multiprocessing as mp
@@ -7,28 +7,28 @@ import os
 import pandas as pd
 from pathlib import Path
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+import re
 import threading
 import time
 from typing import Callable
-
 from ..utils import HTMLBuilder
 from ..utils import JDLogger
 from ..utils import parse_degrees, parse_location, build_regex
 from ..utils import get_data_dir, get_data_sources
 
 
-COLUMN_ORDER = [
-    'id', 'date_posted', 'city', 'state', 'location', 'location_score',
-    'company', 'company_description', 'company_industry',
-    'company_num_employees', 'company_revenue', 'company_rating'
-    'company_reviews_count', 'company_addresses', 'company_url'
-    'company_url_direct', 'company_logo', 'title', 'job_function',
-    'description', 'skills', 'keywords', 'keyword_score', 'job_level',
-    'experience_range', 'job_type', 'work_from_home_type', 'is_remote',
-    'has_ba', 'has_ma', 'has_phd', 'degree_score', 'salary_source',
-    'interval', 'min_amount', 'max_amount', 'currency', 'vacancy_count',
-    'site', 'job_url', 'job_url_direct', 'emails'
-]
+# COLUMN_ORDER = [
+#     'id', 'date_posted', 'city', 'state', 'location', 'location_score',
+#     'company', 'company_description', 'company_industry',
+#     'company_num_employees', 'company_revenue', 'company_rating'
+#     'company_reviews_count', 'company_addresses', 'company_url'
+#     'company_url_direct', 'company_logo', 'title', 'job_function',
+#     'description', 'skills', 'keywords', 'keyword_score', 'job_level',
+#     'experience_range', 'job_type', 'work_from_home_type', 'is_remote',
+#     'has_ba', 'has_ma', 'has_phd', 'degree_score', 'salary_source',
+#     'interval', 'min_amount', 'max_amount', 'currency', 'vacancy_count',
+#     'site', 'job_url', 'job_url_direct', 'emails'
+# ]
 
 
 class JobsDataModel(QAbstractTableModel):
@@ -79,6 +79,7 @@ class JobsDataModel(QAbstractTableModel):
                 elif data == "latest":
                     # Find most recent day-wise subdirectory
                     data_paths = get_data_sources()
+                    del data_paths["Archive"]
                     path = data_paths[max(data_paths.keys())]
             elif isinstance(data, Path):
                 # Use specified directory
@@ -193,23 +194,36 @@ class JobsDataModel(QAbstractTableModel):
             #     return str(self._jobs._df.index[section])
         return None
     
+    def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
+        col_name = self._df.columns[column]
+        self.layoutAboutToBeChanged.emit()
+        try:
+            self._df.sort_values(by=col_name,
+                                 ascending=(order == Qt.SortOrder.AscendingOrder),
+                                 inplace=True)
+        except Exception as e:
+            self._logger.warning(f"Failed to sort by column '{col_name}': {e}")
+        self.layoutChanged.emit()
+    
     #################################
     ##       Data Collection       ##
     #################################
     
     def __preprocess(self):
         """ Preprocess collected job postings. """
-        # Standardize date_posted column to datetime
-        self._df["date_posted"] = pd.to_datetime(self._df["date_posted"])
+        # Remove escape characters from emphasis tags in descriptions
+        self._df["description"] = self._df["description"].apply(
+            lambda md: re.sub(r'\\*(_|\*)', r'\1', md) if isinstance(md, str) else md)
+        # Ensure date_posted is in YYYY-MM-DD format
+        self._df["date_posted"] = pd.to_datetime(self._df["date_posted"]).dt.strftime("%Y-%m-%d")
         # Parse locations into city and state
-        city_state_loc = self._df["location"].map(parse_location)
-        self._df["city"], self._df["state"], self._df["location"] = zip(*city_state_loc)
+        self._df["city"], self._df["state"] = zip(*self._df["location"].map(parse_location))
         # Add degree existence columns
         has_degrees = self._df["description"].map(parse_degrees)
         self._df["has_ba"], self._df["has_ma"], self._df["has_phd"] = zip(*has_degrees)
-        # Standardize column order
-        existing_cols = [col for col in COLUMN_ORDER if col in self._df.columns]
-        self._df = self._df.reindex(columns=existing_cols)
+        # # Standardize column order
+        # existing_cols = [col for col in COLUMN_ORDER if col in self._df.columns]
+        # self._df = self._df.reindex(columns=existing_cols)
 
     @staticmethod
     def __scrape_jobs_worker(queue: mp.Queue, kwargs: dict):
@@ -326,12 +340,6 @@ class JobsDataModel(QAbstractTableModel):
     ##       Data Processing       ##
     #################################
 
-    def drop_empty_cols(self):
-        """ Drop columns that contain only NaN or empty values. """
-        for col in self._df.columns:
-            if self._df[col].replace("", pd.NA).isna().all():
-                self._df.drop(columns=[col], inplace=True)
-
     def exists(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
         """ Create a boolean mask indicating which rows match the specified expression.
         
@@ -402,6 +410,7 @@ class JobsDataModel(QAbstractTableModel):
         """
         n_init = len(self._df)
         self._df = self._df[~self.exists(column, expression)]
+        self._modified = True
         self.logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` rejection filter.")
         return n_init - len(self._df)
 
@@ -429,6 +438,7 @@ class JobsDataModel(QAbstractTableModel):
         """
         n_init = len(self._df)
         self._df = self._df[self.exists(column, expression)]
+        self._modified = True
         self.logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` requirement filter.")
         return n_init - len(self._df)
 
@@ -542,71 +552,75 @@ class JobsDataModel(QAbstractTableModel):
         Assumes that `location_score`, `degree_score`,
         `keyword_score`, and `site_score` columns exist.
         """
-        self._df.sort_values(by=["date_posted", "location_score",
-                                 "degree_score", "keyword_score",
-                                 "site_score"],
+        self._df.sort_values(by=["date_posted", "location_score", "degree_score",
+                                 "keyword_score", "site_score"],
                              ascending=False, inplace=True)
         self._df.reset_index(drop=True, inplace=True)
         
     def prioritize(self,
-                   keyword_value_map: dict[int, list[str]],
                    state_rank_order: list[str],
-                   site_rank_order: list[str],
                    degree_values: tuple[int, int, int],
+                   keyword_value_map: dict[int, list[str]],
+                   site_rank_order: list[str],
                    drop_intermediate: bool = True):
         """ Helper method to apply a priority ordering among job postings.
 
         Parameters
         ----------
+        state_rank_order : list[str]
+            List of states in descending priority order.
+        degree_values : tuple[int, int, int]
+            Tuple of score adjustments for (bachelor, master, doctorate) degrees.
         keyword_value_map : dict[int, list[str]]
             Dictionary mapping integer priorities to lists of keywords.
             Each keyword found in title or description adds the corresponding
             priority to the job posting's running score.
-        state_rank_order : list[str]
-            List of states in descending priority order.
         site_rank_order : list[str]
             List of job sites in descending priority order.
-        degree_values : tuple[int, int, int]
-            Tuple of score adjustments for (bachelor, master, doctorate) degrees.
         drop_intermediate : bool, optional
             Whether to drop intermediate scoring columns after prioritization.
         """
         keyword_results = self.keyword_score(keyword_value_map)
-        self._df["keyword_score"], self._df["keywords"] = keyword_results  # type: ignore
-        self._df["degree_score"] = self.degree_score(degree_values)
         self._df["location_score"] = self.rank_order_score("state", state_rank_order)
+        self._df["degree_score"] = self.degree_score(degree_values)
+        self._df["keyword_score"], self._df["keywords"] = keyword_results  # type: ignore
         self._df["site_score"] = self.rank_order_score("site", site_rank_order)
         self.standard_ordering()
         if drop_intermediate:
-            self._df.drop(columns=["keyword_score", "keywords", "degree_score",
-                                "req_score", "location_score", "site_score"], inplace=True)
+            self._df.drop(columns=["location_score", "degree_score", "keyword_score",
+                                   "keywords", "site_score"], inplace=True)
 
-    def deduplicate(self) -> int:
-        """ Remove duplicate job postings where the following column
-        subsets are identical: `(company, terms)` or `(title, terms)`
-        if `terms` column exists, otherwise `(company title)`.
+    def drop_duplicate_jobs(self) -> int:
+        """ Remove duplicate job postings. Keeps the first occurrence.
+
+        Sorting jobs in descending order of preference before calling
+        this method is recommended to retain the most relevant postings.
 
         Returns
         -------
         int
             number of duplicates removed.
-
-        Notes
-        -----
-        The `terms` column is created in `JobsData::keyword_score()` method;
-        assuming a **sufficiently rich keyword dictionary**, it can serve
-        as an efficient heuristic for identifying duplicate descriptions
-        where `company` or `title` may vary slightly.
         """
         n_init = len(self._df)
-        has_terms = [["company", "terms"], ["title", "terms"]]
-        no_terms = [["company", "title"]]
-        subsets = has_terms if "terms" in self._df.columns else no_terms
-        for subset in subsets:
-            self._df.drop_duplicates(subset=subset, inplace=True)
-        self._df.reset_index(drop=True)
+        # Drop duplicates with the same job board identifier
+        self._df.drop_duplicates(subset=["id"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates pointing to the same direct job URL
+        self._df.drop_duplicates(subset=["job_url_direct"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates with the same company and title
+        self._df.drop_duplicates(subset=["company", "title"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates with the same title and description
+        self._df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
+        self._df.reset_index(drop=True, inplace=True)
+        self._modified = True
         self.logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
         return n_init - len(self._df)
+    
+    def drop_empty_cols(self):
+        """ Drop columns that contain only NaN or empty values. """
+        for col in self._df.columns:
+            if self._df[col].replace("", pd.NA).isna().all():
+                self._df.drop(columns=[col], inplace=True)
+        self._modified = True
     
     ################################
     ##       Data Exporting       ##
@@ -647,13 +661,18 @@ class JobsDataModel(QAbstractTableModel):
                 file = path / f"{name}_{i}.{extension}"
         return file
     
-    def export_csv(self, path: Path|None = None) -> Path:
+    def export_csv(self,
+                   path: Path|None = None,
+                   drop_derived: bool = True) -> Path:
         """ Save collected job postings to CSV file.
 
         Parameters
         ----------
         path : Path, optional
             Output directory to save data; if empty, uses derived path.
+        drop_derived : bool, optional
+            Whether to drop derived columns. That is, columns
+            resulting from transformations of the original data.
 
         Returns
         -------
@@ -663,8 +682,10 @@ class JobsDataModel(QAbstractTableModel):
         # Validate output path
         file = self.__validate_path(path, "jobs_data.csv")
         # Prepare DataFrame for saving
-        new_cols = ["city", "state", "has_ba", "has_ma", "has_phd"]
-        data = self._df.drop(columns=new_cols, errors='ignore')
+        data = self._df.copy()
+        if drop_derived:
+            derived_cols = [col for col in data.columns if col not in desired_order]
+            data.drop(columns=derived_cols, inplace=True)
         # Save DataFrame to CSV
         data.to_csv(file, index=False)
         JobsDataModel._logger.info(f"Saved {len(self._df)} jobs to {file}")
