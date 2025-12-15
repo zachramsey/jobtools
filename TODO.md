@@ -1,0 +1,10 @@
+- [ ] Fix error thrown when updating archive data
+- [ ] Make table width correctly adjust to window size; insert line breaks for long cell contents; no horizontal scroll
+- [ ] Move Load/Save config to settings
+- [ ] Move "Collect Jobs" button to data page
+- [ ] Refresh button(s) for data source and config selectors
+- [ ] Automatically refresh data source selector and table view when new data collected
+- [ ] [Maybe] Automatically switch to console page on collection start
+- [ ] [Maybe] Set up data handling as monolithic data set (current the archive); easier data management and may be helpful for detecting re-posted jobs
+- [ ] Options for favoriting, pinning, and/or grouping job listings
+- [ ] Theme options in settings

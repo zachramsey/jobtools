@@ -38,7 +38,9 @@ class CollectionWorker(QObject):
         """
         try:
             # Initialize JobsData
-            self._data_model.load_data(self._config.get("data_source", ""))
+            source = self._config.get("data_source", "")
+            if source:
+                self._data_model.load_data(source)
             self._data_model.logger.info("Starting job collection...")
             # Run collection and sorting for each query
             for query in self._config.get("queries", []):
@@ -57,10 +59,12 @@ class CollectionWorker(QObject):
                 if self._cancel_event and self._cancel_event.is_set():
                     self._data_model.logger.info("Job collection cancelled by user.")
                     break
-                # Remove trivial duplicates
-                self._data_model.deduplicate()
                 # Save intermediate CSV
                 csv_path = self._data_model.export_csv()
+            # Add final data to archive
+            archive = JobsDataModel("archive")
+            archive.update(self._data_model)
+            archive.export_csv()
             if self._cancel_event and self._cancel_event.is_set():
                 # Skip further processing if cancelled
                 self.finished.emit("")
@@ -110,12 +114,12 @@ class RunnerPage(QWidget):
         self.layout().addStretch()
 
         # Run data collection
-        self.run = QPushButton("Collect Jobs")
-        self.layout().addWidget(self.run)
-        self.run.clicked.connect(self._on_run_clicked)
-        self.run.setFixedWidth(200)
-        self.run.setStyleSheet("margin-bottom: 20px;")
-        self.run.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.run_btn = QPushButton("Collect Jobs")
+        self.layout().addWidget(self.run_btn)
+        self.run_btn.clicked.connect(self._on_run_clicked)
+        self.run_btn.setFixedWidth(200)
+        self.run_btn.setStyleSheet("margin-bottom: 20px;")
+        self.run_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
@@ -152,49 +156,49 @@ class RunnerPage(QWidget):
     @Slot()
     def _on_run_clicked(self):
         """ Handle run button click. """
-        if self.run.text() == "Collect Jobs":
+        if self.run_btn.text() == "Collect Jobs":
             # Update UI
-            self.run.setText("Cancel")
-            self.run.setProperty("class", "danger")
-            self.run.style().unpolish(self.run)
-            self.run.style().polish(self.run)
+            self.run_btn.setText("Cancel")
+            self.run_btn.setProperty("class", "danger")
+            self.run_btn.style().unpolish(self.run_btn)
+            self.run_btn.style().polish(self.run_btn)
             # Setup data collection worker
             self._cancel_event = Event()
-            worker_thread = QThread()
-            worker = CollectionWorker(self._data_model,
+            self.worker = CollectionWorker(self._data_model,
                                       self._config_model.get_config_dict(),
                                       self._cancel_event)
-            worker.moveToThread(worker_thread)
+            self.worker_thread = QThread()
+            self.worker.moveToThread(self.worker_thread)
             # Connect signals and slots
-            worker_thread.started.connect(worker.run)
-            worker_thread.finished.connect(worker_thread.deleteLater)
-            worker.finished.connect(worker_thread.quit)
-            worker.finished.connect(worker.deleteLater)
+            self.worker_thread.started.connect(self.worker.run)
+            self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+            self.worker.finished.connect(self.worker_thread.quit)
+            self.worker.finished.connect(self.worker.deleteLater)
             # Connect worker signals to callbacks
-            worker.finished.connect(self._on_collection_finished)
-            worker.error.connect(self._on_collection_error)
+            self.worker.finished.connect(self._on_collection_finished)
+            self.worker.error.connect(self._on_collection_error)
             # Start thread
-            worker_thread.start()
+            self.worker_thread.start()
         else:
             # Signal cancellation
             if self._cancel_event:
                 self._cancel_event.set()
-            self.run.setText("Canceling...")
-            self.run.setEnabled(False)
+            self.run_btn.setText("Canceling...")
+            self.run_btn.setEnabled(False)
 
     @Slot(str)
     def _on_collection_finished(self, csv_path: str):
         """ Handle completion of job data collection. """
-        self.run.setText("Collect Jobs")
-        self.run.setProperty("class", "")
-        self.run.style().unpolish(self.run)
-        self.run.style().polish(self.run)
-        self.run.setEnabled(True)
+        self.run_btn.setText("Collect Jobs")
+        self.run_btn.setProperty("class", "")
+        self.run_btn.style().unpolish(self.run_btn)
+        self.run_btn.style().polish(self.run_btn)
+        self.run_btn.setEnabled(True)
         self._cancel_event = None
 
     @Slot(str)
     def _on_collection_error(self, error_msg: str):
         """ Handle errors during job data collection. """
-        self.run.setEnabled(True)
-        self.run.setText("Collect Jobs")
+        self.run_btn.setEnabled(True)
+        self.run_btn.setText("Collect Jobs")
         raise RuntimeError(f"Job data collection failed: {error_msg}")

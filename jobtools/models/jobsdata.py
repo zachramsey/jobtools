@@ -8,6 +8,7 @@ import pandas as pd
 from pathlib import Path
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 from PySide6.QtGui import QColor, QFont
+import queue
 import re
 import threading
 import time
@@ -55,12 +56,9 @@ class JobsDataModel(QAbstractTableModel):
         self._modified = False
         
         if isinstance(data, pd.DataFrame):
-            self.beginResetModel()
+            self.__pre_load()
             self._df = data.copy()
-            if len(self._df) > 0:
-                self.__preprocess()
-            self._dyn_df = self._df.copy()
-            self.endResetModel()
+            self.__post_load()
             self._logger.info(f"Initialized {len(self._df)} jobs from DataFrame.")
         else:
             self.load_data(data)
@@ -71,6 +69,55 @@ class JobsDataModel(QAbstractTableModel):
         self._sort_column = None
         self._sort_order = Qt.SortOrder.AscendingOrder
         self._filter_masks: dict[str, pd.Series] = {}
+
+    def __len__(self) -> int:
+        """ Get the number of collected job postings. """
+        return len(self._df)
+    
+    def __getattr__(self, name):
+        """ Delegate attribute access to the underlying DataFrame. """
+        return getattr(self._df, name)
+    
+    def __getitem__(self, key):
+        """ Get item(s) from the underlying DataFrame. """
+        result = self._df[key]
+        if isinstance(result, pd.DataFrame):
+            jobs = JobsDataModel(data=result)
+            jobs._new_path = self._new_path
+            jobs._load_path = self._load_path
+            jobs._modified = self._modified
+            return jobs
+        return result
+
+    def __setitem__(self, key, value):
+        """ Set item(s) in the underlying DataFrame. """
+        self._df[key] = value
+
+    @property
+    def path(self) -> Path:
+        """ Get the output path for saving data. """
+        if self._load_path.parts[-1] == "archive":
+            return self._load_path
+        elif self._modified or not self._load_path:
+            return self._new_path
+        else:
+            return self._load_path
+        
+    @property
+    def logger(self) -> JDLogger:
+        """ Get the JobsData logger instance. """
+        return self._logger
+        
+    @classmethod
+    def set_log_level(cls, level: str):
+        """ Set the logging level for the JobsData class.
+
+        Parameters
+        ----------
+        level : str
+            Logging level (e.g., "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL").
+        """
+        cls._logger.set_level(level)
 
     #################################
     ## QAbstractTableModel Methods ##
@@ -206,57 +253,6 @@ class JobsDataModel(QAbstractTableModel):
             print(self._dyn_df["job_url"].iloc[index.row()])
             return self._dyn_df["job_url"].iloc[index.row()]
         return None     # type: ignore
-
-    #################################
-    ##         Data Access         ##
-    #################################
-
-    def __len__(self) -> int:
-        """ Get the number of collected job postings. """
-        return len(self._df)
-    
-    def __getattr__(self, name):
-        """ Delegate attribute access to the underlying DataFrame. """
-        return getattr(self._df, name)
-    
-    def __getitem__(self, key):
-        """ Get item(s) from the underlying DataFrame. """
-        result = self._df[key]
-        if isinstance(result, pd.DataFrame):
-            jobs = JobsDataModel(data=result)
-            jobs._new_path = self._new_path
-            jobs._load_path = self._load_path
-            jobs._modified = self._modified
-            return jobs
-        return result
-
-    def __setitem__(self, key, value):
-        """ Set item(s) in the underlying DataFrame. """
-        self._df[key] = value
-
-    @property
-    def path(self) -> Path:
-        """ Get the output path for saving data. """
-        if self._modified or not self._load_path:
-            return self._new_path
-        else:
-            return self._load_path
-        
-    @property
-    def logger(self) -> JDLogger:
-        """ Get the JobsData logger instance. """
-        return self._logger
-        
-    @classmethod
-    def set_log_level(cls, level: str):
-        """ Set the logging level for the JobsData class.
-
-        Parameters
-        ----------
-        level : str
-            Logging level (e.g., "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL").
-        """
-        cls._logger.set_level(level)
     
     #################################
     ##       Data Collection       ##
@@ -264,11 +260,18 @@ class JobsDataModel(QAbstractTableModel):
 
     def __pre_load(self):
         """ Operations to be performed before loading data. """
+        if len(self._load_path.parts) > 0 and self._load_path.parts[-1] == "data":
+            # Clear out dummy data
+            self._df = pd.DataFrame()
         # Signal model reset
         self.beginResetModel()
     
     def __post_load(self):
         """ Operations to be performed after loading data. """
+        if self._df.empty:
+            self._dyn_df = self._df.copy()
+            self.endResetModel()
+            return
         # Remove escape characters from emphasis tags in descriptions
         self._df["description"] = self._df["description"].apply(
             lambda md: re.sub(r'\\*(_|\*)', r'\1', md) if isinstance(md, str) else md)
@@ -339,10 +342,11 @@ class JobsDataModel(QAbstractTableModel):
             cancel_check = cancel_event.is_set
         # Collect jobs for each location
         n_init = len(self._df)
+        t_init = time.time()
         self.__pre_load()
         for location in locations:
             if cancel_check():
-                self._logger.info("Job collection cancelled before next location.")
+                self._logger.info(f"Job collection cancelled before location '{location}'.")
                 break
             # Scrape jobs for this location and search terms
             kwargs = dict(site_name=site_name,
@@ -359,24 +363,29 @@ class JobsDataModel(QAbstractTableModel):
             q: mp.Queue = mp.Queue()
             p = mp.Process(target=self.__scrape_jobs_worker, args=(q, kwargs))
             p.start()
-            # Monitor process for cancellation
-            while p.is_alive():
+            jobs = pd.DataFrame()
+            # Monitor process and queue
+            while True:
+                # Check for cancellation
                 if cancel_check():
                     self._logger.info("Job collection cancelled: terminating worker process.")
-                    p.terminate()
+                    if p.is_alive():
+                        p.terminate()
+                        p.join()
+                    break
+                # Check for results
+                try:
+                    result = q.get(timeout=0.5)
+                    if isinstance(result, Exception):
+                        self._logger.warning(f"Collection worker raised an exception: {result}")
+                    else:
+                        jobs = result
                     p.join()
                     break
-                time.sleep(0.1)     # Avoid busy waiting
-            # Get results from queue
-            jobs = pd.DataFrame()
-            try:
-                result = q.get_nowait()
-                if isinstance(result, Exception):
-                    self._logger.warning(f"Collection worker raised an exception: {result}")
-                else:
-                    jobs = result
-            except Exception as e:
-                self._logger.warning(f"Failed to get results from collection worker: {e}")
+                except queue.Empty:
+                    # No result yet; check if process is still alive
+                    if not p.is_alive():
+                        break
             # Cancellation mid-scrape
             if cancel_check():
                 break
@@ -399,7 +408,7 @@ class JobsDataModel(QAbstractTableModel):
         self.__post_load()
         # Mark data as modified
         self._modified = True
-        self._logger.info(f"Collected {len(self._df) - n_init} new jobs.")
+        self._logger.info(f"Collected {len(self._df) - n_init} new jobs in {time.time() - t_init:.1f}s.")
         return len(self._df) - n_init
     
     def load_data(self, source: Path | str):
@@ -413,6 +422,8 @@ class JobsDataModel(QAbstractTableModel):
             - *"latest"* : load data from the most recent run.
             - *"archive"* : load data from the archive data path.
         """
+        if source == Path() or source == "":
+            return
         path = Path()
         if isinstance(source, str):
             if source == "archive":
@@ -440,6 +451,7 @@ class JobsDataModel(QAbstractTableModel):
 
     def update(self, other):
         """ Update this `JobsData` instance with another `JobsData` or DataFrame. """
+        n_init = len(self._df)
         self.__pre_load()
         if isinstance(other, JobsDataModel):
             self._df = pd.concat([self._df, other._df], ignore_index=True)
@@ -450,6 +462,7 @@ class JobsDataModel(QAbstractTableModel):
         self._df.reset_index(drop=True, inplace=True)
         self.__post_load()
         self._modified = True
+        self._logger.info(f"Updated JobsData with {len(self._df) - n_init} new jobs.")
 
     #################################
     ##       Filtering Tools       ##
@@ -467,6 +480,8 @@ class JobsDataModel(QAbstractTableModel):
             number of duplicates removed.
         """
         n_init = len(self._df)
+        # Temporarily order jobs chronologically to keep oldest instances
+        self._df.sort_values(by="date_posted", ascending=True, inplace=True, ignore_index=True)
         # Drop duplicates with the same job board identifier
         self._df.drop_duplicates(subset=["id"], keep="first", inplace=True, ignore_index=True)
         # Drop duplicates pointing to the same direct job URL
@@ -475,6 +490,8 @@ class JobsDataModel(QAbstractTableModel):
         self._df.drop_duplicates(subset=["company", "title"], keep="first", inplace=True, ignore_index=True)
         # Drop duplicates with the same title and description
         self._df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
+        # Restore original order
+        self._df.sort_values(by="date_posted", ascending=False, inplace=True, ignore_index=True)
         self._modified = True
         self._logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
         return n_init - len(self._df)
