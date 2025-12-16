@@ -92,6 +92,7 @@ class JobToolsApp(QMainWindow):
 
         # Load config from last session
         cfg_model.load_last_config()
+        data_page._on_load_data_source()
 
     def add_page(self,
                  widget: QWidget,

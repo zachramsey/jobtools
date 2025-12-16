@@ -100,6 +100,7 @@ def parse_degrees(text: str) -> tuple[bool, bool, bool]:
     tuple[bool, bool, bool]
         Tuple indicating presence of (bachelor, master, doctorate) degrees.
     """
+    text = str(text)
     # Handle "BS/MS" cases
     clean_text = text.replace('/', ' ')
     # Check each degree level

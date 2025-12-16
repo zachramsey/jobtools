@@ -154,14 +154,14 @@ class FilterPage(QWidget):
             if val != self.wm_selector.get_selected():
                 self.wm_selector.set_selected(val)
             val = [wm.upper() == "remote" for wm in val]
-            self._data_model.filter_data("is_remote", val)
+            self._data_model.set_filter("work_models", "is_remote", val)
         
         # Job type selector
         val = self.__get_value("job_types", top_left)
         if val is not None:
             if val != self.jt_selector.get_selected():
                 self.jt_selector.set_selected(val)
-            self._data_model.filter_data("job_type", val)
+            self._data_model.set_filter("job_types", "job_type", val)
         
         # Title exclude editor
         val = self.__get_value("title_exclude_available", top_left)
@@ -171,7 +171,7 @@ class FilterPage(QWidget):
         if val is not None:
             if val != self.te_editor.get_selected():
                 self.te_editor.set_selected(val)
-            self._data_model.filter_data("title", val, invert=True)
+            self._data_model.set_filter("title_exclude", "title", val, invert=True)
         
         # Title require editor
         val = self.__get_value("title_require_available", top_left)
@@ -181,7 +181,7 @@ class FilterPage(QWidget):
         if val is not None:
             if val != self.tr_editor.get_selected():
                 self.tr_editor.set_selected(val)
-            self._data_model.filter_data("title", val)
+            self._data_model.set_filter("title_require", "title", val)
         
         # Description exclude editor
         val = self.__get_value("descr_exclude_available", top_left)
@@ -191,7 +191,7 @@ class FilterPage(QWidget):
         if val is not None:
             if val != self.de_editor.get_selected():
                 self.de_editor.set_selected(val)
-            self._data_model.filter_data("description", val, invert=True)
+            self._data_model.set_filter("descr_exclude", "description", val, invert=True)
         
         # Description require editor
         val = self.__get_value("descr_require_available", top_left)
@@ -201,4 +201,4 @@ class FilterPage(QWidget):
         if val is not None:
             if val != self.dr_editor.get_selected():
                 self.dr_editor.set_selected(val)
-            self._data_model.filter_data("description", val)
+            self._data_model.set_filter("descr_require", "description", val)

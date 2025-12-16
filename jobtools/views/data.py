@@ -127,17 +127,17 @@ class DataPage(QWidget):
         filter_cfg = cfg.get("filter", {})
         work_models = filter_cfg.get("work_models", [])
         work_models = [wm.upper() == "remote" for wm in work_models]
-        self._data_model.filter_data("is_remote", work_models)
+        self._data_model.set_filter("work_models", "is_remote", work_models)
         job_types = filter_cfg.get("job_types", [])
-        self._data_model.filter_data("job_type", job_types)
+        self._data_model.set_filter("job_types", "job_type", job_types)
         title_excl = filter_cfg.get("title_exclude_selected", [])
-        self._data_model.filter_data("title", title_excl, invert=True)
+        self._data_model.set_filter("title_exclude", "title", title_excl, invert=True)
         title_req = filter_cfg.get("title_require_selected", [])
-        self._data_model.filter_data("title", title_req)
+        self._data_model.set_filter("title_require", "title", title_req)
         descr_excl = filter_cfg.get("descr_exclude_selected", [])
-        self._data_model.filter_data("description", descr_excl, invert=True)
+        self._data_model.set_filter("descr_exclude", "description", descr_excl, invert=True)
         descr_req = filter_cfg.get("descr_require_selected", [])
-        self._data_model.filter_data("description", descr_req)
+        self._data_model.set_filter("descr_require", "description", descr_req)
 
     @Slot(int)
     def _on_load_data_source(self):

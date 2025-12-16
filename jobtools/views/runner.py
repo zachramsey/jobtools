@@ -62,14 +62,12 @@ class CollectionWorker(QObject):
                 # Save intermediate CSV
                 csv_path = self._data_model.export_csv()
             # Add final data to archive
-            archive = JobsDataModel("archive")
-            archive = self._data_model.update(archive, inplace=False)
-            archive.export_csv()
+            self._data_model.update_archive()
+            # Emit finished signal
             if self._cancel_event and self._cancel_event.is_set():
-                # Skip further processing if cancelled
                 self.finished.emit("")
-                return
-            self.finished.emit(csv_path)
+            else:
+                self.finished.emit(str(csv_path))
         except Exception:
             self.error.emit(traceback.format_exc())
 

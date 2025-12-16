@@ -1,4 +1,3 @@
-from copy import deepcopy
 import datetime as dt
 from jobspy import scrape_jobs, desired_order       # type: ignore
 from markdownify import MarkdownConverter           # type: ignore
@@ -14,10 +13,9 @@ import re
 import threading
 import time
 from typing import Callable
-from ..utils import HTMLBuilder
-from ..utils import JDLogger
-from ..utils import parse_degrees, parse_location, build_regex
-from ..utils import get_data_dir, get_data_sources
+from ..utils import (HTMLBuilder, JDLogger, parse_degrees,
+                     parse_location, build_regex,
+                     get_data_dir, get_data_sources)
 
 
 class JobsDataModel(QAbstractTableModel):
@@ -42,13 +40,21 @@ class JobsDataModel(QAbstractTableModel):
             - *"archive"* : load data from the archive data path.
         """
         super().__init__()
-
         date = dt.datetime.now().strftime("%Y%m%d")
         time = dt.datetime.now().strftime('%H%M')
         self._new_path = get_data_dir() / date / time
         self._load_path = Path()
         self._modified = False
+
+        # Internal DataFrame and dynamic view
+        self.columns: list[str] = []
+        self._col_len_thresh: dict[str, int] = {}
+        self._header_labels: dict[str, str] = {}
+        self._filter_masks: dict[str, pd.Series] = {}
+        self._sort_column = None
+        self._sort_order = Qt.SortOrder.AscendingOrder
         
+        # Initialize data
         if isinstance(data, pd.DataFrame):
             self.__pre_load()
             self._df = data.copy()
@@ -57,13 +63,8 @@ class JobsDataModel(QAbstractTableModel):
         else:
             self.load_data(data)
 
-        # Sorting state
+        # Visible columns
         self.columns = self._df.columns.tolist()
-        self._col_len_thresh: dict[str, int] = {}
-        self._header_labels: dict[str, str] = {}
-        self._sort_column = None
-        self._sort_order = Qt.SortOrder.AscendingOrder
-        self._filter_masks: dict[str, pd.Series] = {}
 
     def __len__(self) -> int:
         """ Get the number of collected job postings. """
@@ -238,7 +239,8 @@ class JobsDataModel(QAbstractTableModel):
         else:
             self._dyn_df = self._df.copy()
             
-    def filter_data(self,
+    def set_filter(self,
+                    identifier: str,
                     column: str,
                     expression: list[str]|str|bool|int|float|pd.Series|Callable,
                     invert: bool = False):
@@ -246,6 +248,8 @@ class JobsDataModel(QAbstractTableModel):
 
         Parameters
         ----------
+        identifier : str
+            Unique identifier for the filter (used to manage multiple filters).
         column : str
             Name of the source column to search.
         expression : list[str]|str|bool|int|float|pd.Series|Callable
@@ -258,7 +262,14 @@ class JobsDataModel(QAbstractTableModel):
         mask = self.exists(column, expression)
         if invert:
             mask = ~mask
-        self._filter_masks[column] = mask
+        self._filter_masks[identifier] = mask
+        self.__apply_filters()
+        self.__apply_sort()
+        self.endResetModel()
+
+    def refresh_view(self):
+        """ Refresh the dynamic view by reapplying filters and sorting. """
+        self.beginResetModel()
         self.__apply_filters()
         self.__apply_sort()
         self.endResetModel()
@@ -275,13 +286,8 @@ class JobsDataModel(QAbstractTableModel):
             self._load_path = Path()
         # Signal model reset
         self.beginResetModel()
-    
-    def __post_load(self):
-        """ Operations to be performed after loading data. """
-        if self._df.empty:
-            self._dyn_df = self._df.copy()
-            self.endResetModel()
-            return
+
+    def __prep_data(self):
         # Remove escape characters from emphasis tags in descriptions
         self._df["description"] = self._df["description"].apply(
             lambda md: re.sub(r'\\*(_|\*)', r'\1', md) if isinstance(md, str) else md)
@@ -292,16 +298,18 @@ class JobsDataModel(QAbstractTableModel):
         # Add degree existence columns
         has_degrees = self._df["description"].map(parse_degrees)
         self._df["has_ba"], self._df["has_ma"], self._df["has_phd"] = zip(*has_degrees)
-        # Remove duplicate job postings
-        self.drop_duplicate_jobs()
+    
+    def __post_load(self):
+        """ Operations to be performed after loading data. """
         # Copy to dynamic DataFrame
         self._dyn_df = self._df.copy()
-        # Apply any active filters and sorting criteria
-        self.__apply_filters()
-        self.__apply_sort()
-        # Compute dynamic string wrapping thresholds
-        for col in ["company", "title"]:
-            self._col_len_thresh[col] = self.__calc_col_len_thresh(col)
+        if not self._df.empty:
+            # Apply any active filters and sorting criteria
+            self.__apply_filters()
+            self.__apply_sort()
+            # Compute dynamic string wrapping thresholds
+            for col in ["company", "title"]:
+                self._col_len_thresh[col] = self.__calc_col_len_thresh(col)
         # Signal model reset complete
         self.endResetModel()
 
@@ -414,11 +422,15 @@ class JobsDataModel(QAbstractTableModel):
             # Append to main DataFrame
             self._df = pd.concat([self._df, jobs], ignore_index=True)
             self._df.reset_index(drop=True, inplace=True)
+            self._modified = True
         # Convert raw html descriptions to markdown
         self._df["description"] = self._df["description"].apply(
             lambda html: self._converter.convert(html)
                          if isinstance(html, str) and len(html) > 0 else html)
-        self._modified = True
+        # Prepare data
+        self.__prep_data()
+        self.drop_duplicate_jobs()
+        # Update dynamic view
         self.__post_load()
         self._logger.info(f"Collected {len(self._df) - n_init} new jobs in {time.time() - t_init:.1f}s.")
         return len(self._df) - n_init
@@ -454,6 +466,7 @@ class JobsDataModel(QAbstractTableModel):
         self._df = pd.read_csv(source)
         self._load_path = source.parent
         self._modified = False
+        self.__prep_data()
         self.__post_load()
         self._logger.info(f"Loaded {len(self._df)} jobs from {source}")
 
@@ -465,21 +478,26 @@ class JobsDataModel(QAbstractTableModel):
             other_df = other
         else:
             raise TypeError("Argument 'other' must be a JobsDataModel or DataFrame.")
-        if inplace:
-            self.__pre_load()
-            self._df = pd.concat([self._df, other_df], ignore_index=True)
-            self._df.reset_index(drop=True, inplace=True)
-            self._modified = True
-            self.__post_load()
-            return None
-        else:
-            jobs = deepcopy(self)
-            jobs.__pre_load()
-            jobs._df = pd.concat([jobs._df, other_df], ignore_index=True)
-            jobs._df.reset_index(drop=True, inplace=True)
-            jobs._modified = True
-            jobs.__post_load()
+        jobs = self if inplace else self.clone()
+        jobs.__pre_load()
+        jobs._df = pd.concat([jobs._df, other_df], ignore_index=True)
+        jobs._df.reset_index(drop=True, inplace=True)
+        jobs._modified = True
+        jobs.__prep_data()
+        jobs.drop_duplicate_jobs()
+        jobs.__post_load()
+        if not inplace:
             return jobs
+        
+    def update_archive(self):
+        """ Update the archive data with the current data. """
+        archive = JobsDataModel("archive")
+        archive._df = pd.concat([archive._df, self._df], ignore_index=True)
+        archive._df["description"] = archive._df["description"].apply(
+            lambda md: re.sub(r'\\*(_|\*)', r'\1', md) if isinstance(md, str) else md)
+        archive._df["date_posted"] = pd.to_datetime(archive._df["date_posted"]).dt.strftime("%Y-%m-%d")
+        archive.drop_duplicate_jobs()
+        archive.export_csv(get_data_dir() / "archive")
 
     #################################
     ##       Filtering Tools       ##
@@ -678,9 +696,11 @@ class JobsDataModel(QAbstractTableModel):
         Assumes that `location_score`, `degree_score`,
         `keyword_score`, and `site_score` columns exist.
         """
-        self._df.sort_values(by=["date_posted", "location_score", "degree_score",
-                                 "keyword_score", "site_score"],
+        self._df["qualification_score"] = (self._df["degree_score"] + self._df["keyword_score"])
+        self._df.sort_values(by=["date_posted", "location_score",
+                                 "qualification_score", "site_score"],
                              ascending=False, inplace=True, ignore_index=True)
+        self._df.drop(columns=["qualification_score"], inplace=True)
         
     def prioritize(self,
                    state_rank_order: list[str],
@@ -719,6 +739,20 @@ class JobsDataModel(QAbstractTableModel):
     ###############################
     ##         Utilities         ##
     ###############################
+
+    def clone(self) -> 'JobsDataModel':
+        """ Create a copy of this JobsDataModel instance. """
+        new = JobsDataModel(data=self._df.copy())
+        new._new_path = self._new_path
+        new._load_path = self._load_path
+        new._modified = self._modified
+        new.columns = list(self.columns)
+        new._col_len_thresh = dict(self._col_len_thresh)
+        new._header_labels = dict(self._header_labels)
+        new._filter_masks = dict(self._filter_masks)
+        new._sort_column = self._sort_column
+        new._sort_order = self._sort_order
+        return new
 
     def __calc_col_len_thresh(self, col: str, method: str = "iqr") -> int:
         """ Calculate string length threshold for wrapping long text in the specified column. """
