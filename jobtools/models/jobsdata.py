@@ -1,3 +1,4 @@
+from copy import deepcopy
 import datetime as dt
 from jobspy import scrape_jobs, desired_order       # type: ignore
 from markdownify import MarkdownConverter           # type: ignore
@@ -23,15 +24,10 @@ class JobsDataModel(QAbstractTableModel):
     """ Wrapper around jobspy API to collect and process job postings. """
 
     _logger = JDLogger()
-    """ Logger instance for JobsData class. """
-    
-    _converter = MarkdownConverter(bullets='*',
-                                   default_title=True,
-                                   escape_misc=False,
-                                   heading_style=ATX,
-                                   newline_style=SPACES,
-                                   strong_em_symbol=UNDERSCORE)
-    """ Converter to put raw HTML job descriptions into markdown format. """
+    _converter = MarkdownConverter(
+        bullets='*', default_title=True, escape_misc=False,
+        heading_style=ATX, newline_style=SPACES, strong_em_symbol=UNDERSCORE
+    )
 
     def __init__(self, data: pd.DataFrame|Path|str = pd.DataFrame()):
         """ Initialize the job collector.
@@ -50,8 +46,6 @@ class JobsDataModel(QAbstractTableModel):
         date = dt.datetime.now().strftime("%Y%m%d")
         time = dt.datetime.now().strftime('%H%M')
         self._new_path = get_data_dir() / date / time
-        """ Unique output directory for new/modified data. """
-
         self._load_path = Path()
         self._modified = False
         
@@ -65,6 +59,7 @@ class JobsDataModel(QAbstractTableModel):
 
         # Sorting state
         self.columns = self._df.columns.tolist()
+        self._col_len_thresh: dict[str, int] = {}
         self._header_labels: dict[str, str] = {}
         self._sort_column = None
         self._sort_order = Qt.SortOrder.AscendingOrder
@@ -96,7 +91,7 @@ class JobsDataModel(QAbstractTableModel):
     @property
     def path(self) -> Path:
         """ Get the output path for saving data. """
-        if self._load_path.parts[-1] == "archive":
+        if len(self._load_path.parts) > 0 and self._load_path.parts[-1] == "archive":
             return self._load_path
         elif self._modified or not self._load_path:
             return self._new_path
@@ -147,6 +142,13 @@ class JobsDataModel(QAbstractTableModel):
         self._header_labels = labels
         self.endResetModel()
 
+    def get_index_url(self, index: QModelIndex) -> str:
+        """ Get the posting URL for the given model index. """
+        col = self.columns[index.column()]
+        if col == "site":
+            return self._dyn_df["job_url"].iloc[index.row()]
+        return None     # type: ignore
+
     def rowCount(self, parent=QModelIndex()) -> int:
         return self._dyn_df.shape[0]
     
@@ -155,6 +157,15 @@ class JobsDataModel(QAbstractTableModel):
     
     def columnIndex(self, column_name: str) -> int:
         return int(self.columns.index(column_name))
+    
+    def headerData(self, section, orientation, role):
+        if role == Qt.ItemDataRole.DisplayRole:
+            if orientation == Qt.Orientation.Horizontal:
+                col = self.columns[section]
+                return self._header_labels.get(col, col.replace("_", " ").title())
+            elif orientation == Qt.Orientation.Vertical:
+                return str(self._dyn_df.index[section])
+        return None
     
     def data(self, index, role):
         if not index.isValid():
@@ -166,35 +177,50 @@ class JobsDataModel(QAbstractTableModel):
         except AttributeError:
             pass
         if role == Qt.ItemDataRole.DisplayRole:
+            split = " "
             if isinstance(val, list):
-                return ", ".join(str(v) for v in val)
+                val = ", ".join(str(v) for v in val)
+                split = ", "
             if isinstance(val, bool):
-                return "◆" if val else ""   # ╳
+                val = "◆" if val else ""   # ╳
+            if col in self._col_len_thresh:
+                pos = self._col_len_thresh[col]
+                val = str(val)
+                while pos < len(val):
+                    split_pos = val.rfind(split, 0, pos)
+                    if split_pos == -1:
+                        break
+                    if split == ", ":
+                        split_pos += 1
+                    val = val[:split_pos] + "\n" + val[split_pos + 1:]
+                    pos = split_pos + self._col_len_thresh[col] + 1
             return str(val)
         elif role == Qt.ItemDataRole.EditRole:
             return val
         elif role == Qt.ItemDataRole.TextAlignmentRole:
             if isinstance(val, bool):
                 return Qt.AlignmentFlag.AlignCenter
-        if col == "site":
-            if role == Qt.ItemDataRole.ForegroundRole:
-                return QColor(Qt.GlobalColor.blue)
-            if role == Qt.ItemDataRole.FontRole:
+        elif role == Qt.ItemDataRole.FontRole:
+            if col == "site":
                 font = QFont()
                 font.setUnderline(True)
                 return font
-            if role == Qt.ItemDataRole.UserRole + 1:
+        elif role == Qt.ItemDataRole.ForegroundRole:
+            if col == "site":
+                return QColor(Qt.GlobalColor.blue)
+        elif role == Qt.ItemDataRole.UserRole + 1:
+            # Custom role: indicates clickable link
+            if col == "site":
                 return True
         return None
     
-    def headerData(self, section, orientation, role):
-        if role == Qt.ItemDataRole.DisplayRole:
-            if orientation == Qt.Orientation.Horizontal:
-                col = self.columns[section]
-                return self._header_labels.get(col, col.replace("_", " ").title())
-            elif orientation == Qt.Orientation.Vertical:
-                return str(self._dyn_df.index[section])
-        return None
+    def __apply_sort(self):
+        if self._sort_column is not None:
+            ascending = self._sort_order == Qt.SortOrder.AscendingOrder
+            self._df.sort_values(by=self._sort_column,
+                                 ascending=ascending,
+                                 inplace=True,
+                                 ignore_index=True)
     
     def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
         self._sort_column = self.columns[column]    # type: ignore
@@ -203,13 +229,14 @@ class JobsDataModel(QAbstractTableModel):
         self.__apply_sort()
         self.layoutChanged.emit()
 
-    def __apply_sort(self):
-        if self._sort_column is not None:
-            ascending = self._sort_order == Qt.SortOrder.AscendingOrder
-            self._df.sort_values(by=self._sort_column,
-                                 ascending=ascending,
-                                 inplace=True,
-                                 ignore_index=True)
+    def __apply_filters(self):
+        if self._filter_masks:
+            combined_mask = pd.Series(True, index=self._df.index)
+            for m in self._filter_masks.values():
+                combined_mask &= m
+            self._dyn_df = self._df[combined_mask].reset_index(drop=True)
+        else:
+            self._dyn_df = self._df.copy()
             
     def filter_data(self,
                     column: str,
@@ -222,8 +249,7 @@ class JobsDataModel(QAbstractTableModel):
         column : str
             Name of the source column to search.
         expression : list[str]|str|bool|int|float|pd.Series|Callable
-            Expression defining the terms or matches to search for.
-
+            Expression defining the terms or matches to search for.  
             *See `JobsData.exists()` for details on supported types.*
         invert : bool, optional
             If True, invert the filter to exclude matching rows.
@@ -236,23 +262,6 @@ class JobsDataModel(QAbstractTableModel):
         self.__apply_filters()
         self.__apply_sort()
         self.endResetModel()
-
-    def __apply_filters(self):
-        if self._filter_masks:
-            combined_mask = pd.Series(True, index=self._df.index)
-            for m in self._filter_masks.values():
-                combined_mask &= m
-            self._dyn_df = self._df[combined_mask].reset_index(drop=True)
-        else:
-            self._dyn_df = self._df.copy()
-
-    def get_index_url(self, index: QModelIndex) -> str:
-        """ Get the posting URL for the given model index. """
-        col = self.columns[index.column()]
-        if col == "site":
-            print(self._dyn_df["job_url"].iloc[index.row()])
-            return self._dyn_df["job_url"].iloc[index.row()]
-        return None     # type: ignore
     
     #################################
     ##       Data Collection       ##
@@ -263,6 +272,7 @@ class JobsDataModel(QAbstractTableModel):
         if len(self._load_path.parts) > 0 and self._load_path.parts[-1] == "data":
             # Clear out dummy data
             self._df = pd.DataFrame()
+            self._load_path = Path()
         # Signal model reset
         self.beginResetModel()
     
@@ -289,6 +299,9 @@ class JobsDataModel(QAbstractTableModel):
         # Apply any active filters and sorting criteria
         self.__apply_filters()
         self.__apply_sort()
+        # Compute dynamic string wrapping thresholds
+        for col in ["company", "title"]:
+            self._col_len_thresh[col] = self.__calc_col_len_thresh(col)
         # Signal model reset complete
         self.endResetModel()
 
@@ -405,9 +418,8 @@ class JobsDataModel(QAbstractTableModel):
         self._df["description"] = self._df["description"].apply(
             lambda html: self._converter.convert(html)
                          if isinstance(html, str) and len(html) > 0 else html)
-        self.__post_load()
-        # Mark data as modified
         self._modified = True
+        self.__post_load()
         self._logger.info(f"Collected {len(self._df) - n_init} new jobs in {time.time() - t_init:.1f}s.")
         return len(self._df) - n_init
     
@@ -424,45 +436,50 @@ class JobsDataModel(QAbstractTableModel):
         """
         if source == Path() or source == "":
             return
-        path = Path()
         if isinstance(source, str):
-            if source == "archive":
-                # Use archive data path
-                path = get_data_dir() / "archive" / "jobs_data.csv"
-            elif source == "latest":
-                # Find most recent day-wise subdirectory
+            if source == "latest":
                 data_paths = get_data_sources()
                 del data_paths["Archive"]
-                path = data_paths[max(data_paths.keys())]
-        elif isinstance(source, Path):
-            # Use specified directory
-            path = source if source.is_absolute() else get_data_dir() / source
-            # If path is a directory, get jobs_data.csv within it
-            if path.is_dir():
-                path = path / "jobs_data.csv"
-        if not path.exists():
-            raise FileNotFoundError(f"Could not find data file at {path}")
+                source = data_paths[max(data_paths.keys())]
+            else:
+                source = Path(source)
+        if isinstance(source, Path):
+            if not source.is_absolute():
+                source = get_data_dir() / source
+            if source.is_dir():
+                source = source / "jobs_data.csv"
+        if not source.exists():
+            raise FileNotFoundError(f"Could not find data file at {source}")
         self.__pre_load()
-        self._df = pd.read_csv(path)
-        self._load_path = path.parent
-        self.__post_load()
+        self._df = pd.read_csv(source)
+        self._load_path = source.parent
         self._modified = False
-        self._logger.info(f"Loaded {len(self._df)} jobs from {path}")
-
-    def update(self, other):
-        """ Update this `JobsData` instance with another `JobsData` or DataFrame. """
-        n_init = len(self._df)
-        self.__pre_load()
-        if isinstance(other, JobsDataModel):
-            self._df = pd.concat([self._df, other._df], ignore_index=True)
-        elif isinstance(other, pd.DataFrame):
-            self._df = pd.concat([self._df, other], ignore_index=True)
-        else:
-            raise TypeError(f"Unsupported type for update with JobsData: {type(other)}")
-        self._df.reset_index(drop=True, inplace=True)
         self.__post_load()
-        self._modified = True
-        self._logger.info(f"Updated JobsData with {len(self._df) - n_init} new jobs.")
+        self._logger.info(f"Loaded {len(self._df)} jobs from {source}")
+
+    def update(self, other, inplace: bool = True):
+        """ Update this `JobsData` instance with another `JobsData` or DataFrame. """
+        if isinstance(other, JobsDataModel):
+            other_df = other._df
+        elif isinstance(other, pd.DataFrame):
+            other_df = other
+        else:
+            raise TypeError("Argument 'other' must be a JobsDataModel or DataFrame.")
+        if inplace:
+            self.__pre_load()
+            self._df = pd.concat([self._df, other_df], ignore_index=True)
+            self._df.reset_index(drop=True, inplace=True)
+            self._modified = True
+            self.__post_load()
+            return None
+        else:
+            jobs = deepcopy(self)
+            jobs.__pre_load()
+            jobs._df = pd.concat([jobs._df, other_df], ignore_index=True)
+            jobs._df.reset_index(drop=True, inplace=True)
+            jobs._modified = True
+            jobs.__post_load()
+            return jobs
 
     #################################
     ##       Filtering Tools       ##
@@ -542,52 +559,6 @@ class JobsDataModel(QAbstractTableModel):
             mask = self._df[column].str.contains(pattern, case=False, na=False)
         return mask
     
-    def exclude(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> int:
-        """ Exclude rows that match the specified expression in the given column.
-        
-        Parameters
-        ----------
-        column : str
-            Name of the source column to search.
-        expression : list[str]|str|bool|int|float|pd.Series|Callable
-            Expression defining the terms or matches to search for.
-
-            *See `JobsData.exists()` for details on supported types.*
-
-        Returns
-        -------
-        int
-            Number of rows removed.
-        """
-        n_init = len(self._df)
-        self._df = self._df[~self.exists(column, expression)]
-        self._modified = True
-        self._logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` rejection filter.")
-        return n_init - len(self._df)
-
-    def select(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> int:
-        """ Select rows that match the specified expression in the given column.
-        
-        Parameters
-        ----------
-        column : str
-            Name of the source column to search.
-        expression : list[str]|str|bool|int|float|pd.Series|Callable
-            Expression defining the terms or matches to search for.
-
-            *See `JobsData.exists()` for details on supported types.*
-
-        Returns
-        -------
-        int
-            Number of rows removed.
-        """
-        n_init = len(self._df)
-        self._df = self._df[self.exists(column, expression)]
-        self._modified = True
-        self._logger.info(f"Removed {n_init - len(self._df)} jobs with `{column.replace('_', ' ')}` requirement filter.")
-        return n_init - len(self._df)
-    
     #################################
     ##        Sorting Tools        ##
     #################################
@@ -651,12 +622,13 @@ class JobsDataModel(QAbstractTableModel):
                 score[mask] += priority
                 for idx in self._df.index[mask]:
                     keywords[idx].append(term)
-        keywords = keywords.apply(lambda kws: ", ".join(kw.replace("\\", "") for kw in kws))
+        keywords = keywords.apply(lambda kws: [kw.replace("\\", "") for kw in kws])
         if inplace:
             self._df["keyword_score"] = score
             self._df["keywords"] = keywords
             self._dyn_df["keyword_score"] = score
             self._dyn_df["keywords"] = keywords
+            self._col_len_thresh["keywords"] = self.__calc_col_len_thresh("keywords")
             return None
         else:
             return score, keywords
@@ -744,6 +716,29 @@ class JobsDataModel(QAbstractTableModel):
             self._dyn_df.drop(columns=["location_score", "degree_score", "keyword_score",
                                       "keywords", "site_score"], inplace=True)
             
+    ###############################
+    ##         Utilities         ##
+    ###############################
+
+    def __calc_col_len_thresh(self, col: str, method: str = "iqr") -> int:
+        """ Calculate string length threshold for wrapping long text in the specified column. """
+        if isinstance(self._df[col].iloc[0], list):
+            item_len = self._df[col].apply(
+                lambda L: sum(len(str(v)) for v in L) + (2 * (len(L) - 1)))
+        else:
+            item_len = self._df[col].str.len()
+        if sum(item_len > 80) == 0:
+            thresh = 80
+        elif method == "iqr":
+            upper, lower = item_len.quantile(0.75), item_len.quantile(0.25)
+            thresh = int(upper + 1.5 * (upper - lower))
+        elif method == "zscore":
+            mean, std = item_len.mean(), item_len.std()
+            z_score = (item_len - mean) / std
+            thresh = int(item_len[z_score <= 3].max())
+        else:
+            thresh = 80
+        return min(thresh, 80)
     
     ################################
     ##       Data Exporting       ##

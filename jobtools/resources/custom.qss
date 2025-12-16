@@ -36,10 +36,10 @@ QPushButton.help-button {{
 
 .data-table QHeaderView {{
     font-weight: bold;
-    font-size: 13px;
+    font-size: 14px;
 }}
 
 .data-table QHeaderView::section {{
-    padding-left: 15px;
-    padding-right: 15px;
+    padding-left: 8px;
+    padding-right: 8px;
 }}

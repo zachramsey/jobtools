@@ -1,12 +1,12 @@
 from pathlib import Path
-from PySide6.QtCore import Qt, Slot, QUrl
+from PySide6.QtCore import Qt, Slot, QUrl, QSize
 from PySide6.QtGui import QDesktopServices, QCursor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QTableView, QComboBox, QPushButton,
                                QHeaderView)
 from .widgets import QHeader
 from ..models import ConfigModel, JobsDataModel
-from ..utils import get_data_dir, get_data_sources, ThemeColor, blend_colors
+from ..utils import get_data_dir, get_data_sources, ThemeColor, blend_colors, get_icon
 
 
 UNUSED_COLUMNS = ['id', 'job_url_direct', 'salary_source', 'interval',
@@ -55,8 +55,8 @@ class DataPage(QWidget):
             "has_ba", "has_ma", "has_phd", "keywords","site", 
         ])
         self._data_model.set_column_labels({
-            "date_posted": "Posted", "state": "Loc",
-            "has_ba": "BA", "has_ma": "MA", "has_phd": "PhD"
+            # "date_posted": "Posted", "state": "Loc",
+            "has_ba": "BA ", "has_ma": "MA ", "has_phd": "PhD"
         })
 
         # Data source selector
@@ -73,6 +73,14 @@ class DataPage(QWidget):
         self.data_load.setCursor(Qt.CursorShape.PointingHandCursor)
         self.data_load.clicked.connect(self._on_load_data_source)
         data_selector_layout.addWidget(self.data_load)
+        self.data_refresh = QPushButton()
+        self.data_refresh.setIcon(get_icon("refresh"))
+        self.data_refresh.setIconSize(QSize(24, 24))
+        self.data_refresh.setStyleSheet("border: none; padding: 5px;")
+        self.data_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.data_refresh.setToolTip("Refresh Data Sources")
+        self.data_refresh.clicked.connect(self._on_refresh_data_sources)
+        data_selector_layout.addWidget(self.data_refresh)
         data_selector_layout.addStretch()
         self.layout().addLayout(data_selector_layout)
 
@@ -83,17 +91,17 @@ class DataPage(QWidget):
         self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
         self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignVCenter)
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        # self.table_view.horizontalHeader().setStretchLastSection(True)
-        self.table_view.horizontalHeader().setProperty("class", "data-table")
+        self.table_view.horizontalHeader().setStretchLastSection(True)
         self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.verticalHeader().setVisible(False)
         self.table_view.setAlternatingRowColors(True)
+        self.table_view.setProperty("class", "data-table")
         bg_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY, 0.7)
         alt_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY_LIGHT, 0.7)
-        self.table_view.setProperty("class", "data-table")
         self.table_view.setStyleSheet(f"QTableView {{ background-color: {bg_color}; alternate-background-color: {alt_color}; }}")
         self.table_view.setShowGrid(False)
         self.table_view.setSelectionMode(QTableView.SelectionMode.NoSelection)
+        self.table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.table_view.setWordWrap(True)
         self.table_view.clicked.connect(self._on_open_job_url)
         self.layout().addWidget(self.table_view)
@@ -137,6 +145,20 @@ class DataPage(QWidget):
         data_path = self.data_selector.currentData()
         if data_path.exists():
             self._setup_data_model(data_path)
+
+    @Slot()
+    def _on_refresh_data_sources(self):
+        """ Refresh the list of available data sources. """
+        current_text = self.data_selector.currentText()
+        self.data_selector.clear()
+        data_sources = get_data_sources()
+        self.data_selector.addItem("Select Data Source...", Path())
+        for name, path in data_sources.items():
+            self.data_selector.addItem(name, path)
+        # Restore previous selection if possible
+        index = self.data_selector.findText(current_text)
+        if index >= 0:
+            self.data_selector.setCurrentIndex(index)
 
     @Slot()
     def _on_open_job_url(self, index):

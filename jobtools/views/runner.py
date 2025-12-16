@@ -1,11 +1,11 @@
 import os
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox
-from PySide6.QtCore import Qt, QModelIndex, Slot, QObject, Signal, QThread
+from PySide6.QtCore import Qt, QModelIndex, Slot, QObject, Signal, QThread, QSize
 from threading import Event
 import traceback
 from .widgets import QHeader
 from ..models import ConfigModel, JobsDataModel
-from ..utils import get_config_dir
+from ..utils import get_config_dir, get_icon
 
 
 SC_TT = """"""
@@ -63,7 +63,7 @@ class CollectionWorker(QObject):
                 csv_path = self._data_model.export_csv()
             # Add final data to archive
             archive = JobsDataModel("archive")
-            archive.update(self._data_model)
+            archive = self._data_model.update(archive, inplace=False)
             archive.export_csv()
             if self._cancel_event and self._cancel_event.is_set():
                 # Skip further processing if cancelled
@@ -94,6 +94,14 @@ class RunnerPage(QWidget):
         self.config_load.setCursor(Qt.CursorShape.PointingHandCursor)
         self.config_load.clicked.connect(self._on_load_config)
         load_layout.addWidget(self.config_load)
+        self.config_refresh = QPushButton()
+        self.config_refresh.setIcon(get_icon("refresh"))
+        self.config_refresh.setIconSize(QSize(24, 24))
+        self.config_refresh.setStyleSheet("border: none; padding: 5px;")
+        self.config_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.config_refresh.setToolTip("Refresh Data Sources")
+        self.config_refresh.clicked.connect(self._on_refresh_configs)
+        load_layout.addWidget(self.config_refresh)
         load_layout.addStretch()
         self.layout().addLayout(load_layout)
 
@@ -137,6 +145,14 @@ class RunnerPage(QWidget):
         self._config_model.dataChanged.emit(QModelIndex(), QModelIndex())
         # Update config edit box
         self.config_edit.setText(config_name)
+
+    @Slot()
+    def _on_refresh_configs(self):
+        """ Refresh the list of saved configurations. """
+        temp = self.config_select.currentText()
+        self.config_select.clear()
+        self.config_select.addItems([""]+self._config_model.get_saved_config_names())
+        self.config_select.setCurrentText(temp)
 
     @Slot()
     def _on_save_config(self):
