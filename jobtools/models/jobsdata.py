@@ -375,7 +375,7 @@ class JobsDataModel(QAbstractTableModel):
                 results_wanted: int,
                 proxy: str,
                 hours_old: int,
-                cancel_event: threading.Event | None = None) -> int:
+                cancel_event: threading.Event | None = None):
         """ Collect job postings.
 
         Parameters
@@ -478,7 +478,6 @@ class JobsDataModel(QAbstractTableModel):
         # Update dynamic view
         self.__post_load()
         self._logger.info(f"Collected {len(self._df) - n_init} new jobs in {time.time() - t_init:.1f}s.")
-        return len(self._df) - n_init
     
     def load_data(self, source: Path | str):
         """ Load job data from a CSV file.
@@ -550,17 +549,8 @@ class JobsDataModel(QAbstractTableModel):
     ##       Filtering Tools       ##
     #################################
 
-    def drop_duplicate_jobs(self) -> int:
-        """ Remove duplicate job postings. Keeps the first occurrence.
-
-        Sorting jobs in descending order of preference before calling
-        this method is recommended to retain the most relevant postings.
-
-        Returns
-        -------
-        int
-            number of duplicates removed.
-        """
+    def drop_duplicate_jobs(self):
+        """ Remove duplicate job postings. Keeps the first occurrence. """
         n_init = len(self._df)
         # Temporarily order jobs chronologically to keep oldest instances
         self._df.sort_values(by="date_posted", ascending=True, inplace=True, ignore_index=True)
@@ -628,38 +618,22 @@ class JobsDataModel(QAbstractTableModel):
     ##        Sorting Tools        ##
     #################################
 
-    def degree_score(self,
-                     degree_values: tuple[int, int, int],
-                     inplace: bool = False) -> pd.Series|None:
+    def update_degree_score(self, degree_values: tuple[int, int, int]):
         """ Compute degree-based priority scores.
 
         Parameters
         ----------
         degree_scores : tuple[int, int, int]
             Tuple of score adjustments for (bachelor, master, doctorate) degrees.
-        inplace : bool, optional
-            If True, add `degree_score` column to DataFrame;  
-            if False, return Series of scores (default).
-
-        Returns
-        -------
-        pd.Series, optional
-            Series of degree-based priority scores.
         """
         score = pd.Series(0, index=self._df.index)
         score += degree_values[0] * self._df["has_ba"].astype(int)
         score += degree_values[1] * self._df["has_ma"].astype(int)
         score += degree_values[2] * self._df["has_phd"].astype(int)
-        if inplace:
-            self._df["degree_score"] = score
-            self._dyn_df["degree_score"] = score
-            return None
-        else:
-            return score
+        self._df["degree_score"] = score
+        self._dyn_df["degree_score"] = score
             
-    def keyword_score(self,
-                      keyword_score_map: dict[int, list[str]],
-                      inplace: bool = False) -> tuple[pd.Series, pd.Series]|None:
+    def update_keyword_score(self, keyword_score_map: dict[int, list[str]]):
         """ Compute keyword-based priority scores.
 
         Parameters
@@ -668,15 +642,6 @@ class JobsDataModel(QAbstractTableModel):
             Dictionary mapping integer priorities to lists of keywords.
             Each keyword found in title or description adds the corresponding
             priority to the job posting's running score.
-        inplace : bool, optional
-            If True, add `keyword_score` and `keywords` columns to DataFrame;  
-            if False, return Series of scores and matched keywords (default).
-
-        Returns
-        -------
-        tuple[pd.Series, pd.Series], optional
-            Series of keyword scores.  
-            Series of matched keywords as comma-separated strings.
         """
         score = pd.Series(0, index=self._df.index)
         keywords = pd.Series([[] for _ in range(len(self._df))], index=self._df.index)
@@ -688,21 +653,16 @@ class JobsDataModel(QAbstractTableModel):
                 for idx in self._df.index[mask]:
                     keywords[idx].append(term)
         keywords = keywords.apply(lambda kws: [kw.replace("\\", "") for kw in kws])
-        if inplace:
-            self._df["keyword_score"] = score
-            self._df["keywords"] = keywords
-            self._dyn_df["keyword_score"] = score
-            self._dyn_df["keywords"] = keywords
-            self._col_len_thresh["keywords"] = self.__calc_col_len_thresh("keywords")
-            return None
-        else:
-            return score, keywords
+        self._df["keyword_score"] = score
+        self._df["keywords"] = keywords
+        self._dyn_df["keyword_score"] = score
+        self._dyn_df["keywords"] = keywords
+        self._col_len_thresh["keywords"] = self.__calc_col_len_thresh("keywords")
     
-    def rank_order_score(self,
+    def update_rank_order_score(self,
                          source_column: str,
                          rank_order: list[str],
-                         target_column: str | None = None) -> pd.Series|None:
-
+                         target_column: str):
         """ Compute priority scores based on specified rank order of column values.
 
         Parameters
@@ -711,14 +671,8 @@ class JobsDataModel(QAbstractTableModel):
             Name of the source column to evaluate.
         rank_order : list[str]
             List of column values in descending priority order.  
-        target_column : str, optional
-            If specified, add `target_column` to DataFrame;  
-            if None, return Series of scores (default).
-
-        Returns
-        -------
-        pd.Series, optional
-            Series of rank-order based priority scores.
+        target_column : str
+            Name of the target column to store computed scores.
 
         Notes
         -----
@@ -729,12 +683,8 @@ class JobsDataModel(QAbstractTableModel):
                         for rank, value in enumerate(rank_order)}
         priority_map[""] = -1
         scores = self._df[source_column].map(priority_map).fillna(0).astype(int)
-        if target_column is not None:
-            self._df[target_column] = scores
-            self._dyn_df[target_column] = scores
-            return None
-        else:
-            return scores
+        self._df[target_column] = scores
+        self._dyn_df[target_column] = scores
         
     def standard_ordering(self):
         """ Sort job postings hierarchically by date
@@ -748,40 +698,6 @@ class JobsDataModel(QAbstractTableModel):
                                  "qualification_score", "site_score"],
                              ascending=False, inplace=True, ignore_index=True)
         self._df.drop(columns=["qualification_score"], inplace=True)
-        
-    def prioritize(self,
-                   state_rank_order: list[str],
-                   degree_values: tuple[int, int, int],
-                   keyword_value_map: dict[int, list[str]],
-                   site_rank_order: list[str],
-                   drop_intermediate: bool = True):
-        """ Helper method to apply a priority ordering among job postings.
-
-        Parameters
-        ----------
-        state_rank_order : list[str]
-            List of states in descending priority order.
-        degree_values : tuple[int, int, int]
-            Tuple of score adjustments for (bachelor, master, doctorate) degrees.
-        keyword_value_map : dict[int, list[str]]
-            Dictionary mapping integer priorities to lists of keywords.
-            Each keyword found in title or description adds the corresponding
-            priority to the job posting's running score.
-        site_rank_order : list[str]
-            List of job sites in descending priority order.
-        drop_intermediate : bool, optional
-            Whether to drop intermediate scoring columns after prioritization.
-        """
-        self.keyword_score(keyword_value_map, inplace=True)
-        self.rank_order_score("state", state_rank_order, "location_score")
-        self.degree_score(degree_values, inplace=True)
-        self.rank_order_score("site", site_rank_order, "site_score")
-        self.standard_ordering()
-        if drop_intermediate:
-            self._df.drop(columns=["location_score", "degree_score", "keyword_score",
-                                   "keywords", "site_score"], inplace=True)
-            self._dyn_df.drop(columns=["location_score", "degree_score", "keyword_score",
-                                      "keywords", "site_score"], inplace=True)
             
     ###############################
     ##         Utilities         ##

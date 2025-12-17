@@ -79,7 +79,7 @@ class CollectionWorker(QObject):
             # Run collection and sorting for each query
             for query in self._config.get("queries", []):
                 # Job collection
-                _ = self._data_model.collect(
+                self._data_model.collect(
                     site_name=self._config.get("sites_selected", []),
                     search_term=query,
                     job_type=None,  # type: ignore
@@ -325,7 +325,7 @@ class CollectPage(QWidget):
         val = self.__get_value("sites_selected", top_left)
         if val is not None and val != self.s_selector.get_selected():
             self.s_selector.set_selected(val)
-            self._data_model.rank_order_score("site", val, "site_score")
+            self._data_model.update_rank_order_score("site", val, "site_score")
             self._data_model.standard_ordering()
         val = self.__get_value("sites_available", top_left)
         if val is not None and val != self.s_selector.get_available():

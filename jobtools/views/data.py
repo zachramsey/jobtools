@@ -129,8 +129,11 @@ class DataPage(QWidget):
         kw_val_map = {int(terms_key.split("_")[-1]): sort_cfg[terms_key]
                           for terms_key in sort_cfg if terms_key.startswith("terms_selected_")}
         site_order = sort_cfg.get("sites_selected", [])
-        self._data_model.prioritize(loc_order, deg_vals, kw_val_map,
-                                    site_order, drop_intermediate=False)
+        self._data_model.update_rank_order_score("state", loc_order, "location_score")
+        self._data_model.update_degree_score(deg_vals)
+        self._data_model.update_keyword_score(kw_val_map)
+        self._data_model.update_rank_order_score("site", site_order, "site_score")
+        self._data_model.standard_ordering()
         # Apply current filter configuration
         filter_cfg = cfg.get("filter", {})
         work_models = filter_cfg.get("work_models", [])

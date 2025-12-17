@@ -242,7 +242,7 @@ class SortPage(QWidget):
         val = self.__get_value("degree_values", top_left)
         if val is not None and val != self.dv_selector.get_values():
             self.dv_selector.set_values(*val)
-            self._data_model.degree_score(val, inplace=True)
+            self._data_model.update_degree_score(val)
             self._data_model.standard_ordering()
 
         # Location order
@@ -252,7 +252,7 @@ class SortPage(QWidget):
         val = self.__get_value("location_order_selected", top_left)
         if val is not None and val != self.lo_selector.get_selected():
             self.lo_selector.set_selected(val)
-            self._data_model.rank_order_score("state", val, "location_score")
+            self._data_model.update_rank_order_score("state", val, "location_score")
             self._data_model.standard_ordering()
 
         # Term emphasis selectors
@@ -266,5 +266,5 @@ class SortPage(QWidget):
                 selector.set_selected(val)
                 kw_val_map[value] = val
         if kw_val_map:
-            self._data_model.keyword_score(kw_val_map, inplace=True)
+            self._data_model.update_keyword_score(kw_val_map)
             self._data_model.standard_ordering()
