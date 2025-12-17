@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+from PySide6.QtWidgets import (QWidget, QHBoxLayout, QGridLayout,
                                QRadioButton, QLineEdit, QSpinBox, QPushButton)
 from PySide6.QtCore import QModelIndex, Qt, Signal, Slot, QObject, QThread
 from threading import Event
@@ -7,25 +7,43 @@ from ..models import ConfigModel, JobsDataModel
 from .widgets import QHeader, QPlainTextListEdit, QChipSelect
 
 
-P_TT = """Optional proxy server for web requests.\n
-Highly recommended! The job collector makes many requests in
-a short period, which may lead to IP blocking without a proxy."""
+P_TT = """Optional proxy server for web requests.
 
-DS_TT = """Select the source of job data to load.\n
+Highly recommended!
+
+The job collector makes many requests in a short
+period, which may trigger anti-bot protections on
+job sites. Using a proxy will distribute these
+requests and help avoid IP blocking."""
+
+DS_TT = """Select the source of job data to load.
+
 None - starts a fresh collection.
 Archive - loads previously collected data.
 Latest - fetches the most recent data available.
 Manual - allows specifying a custom subdirectory path."""
 
-S_TT = """Select which job sites to collect data from."""
+S_TT = """Select which job sites to collect data from.
 
-L_TT = """Locations to search for jobs in.\n
-Accepts cities, states/provinces, countries, and combinations thereof. """
+Note that the total number of queries will increase
+proportionally with the number of sites selected."""
 
-Q_TT = """List of search queries to use when collecting job data.
-Each query will be used to perform a separate search on each selected job site.\n
+L_TT = """Select locations to search for jobs in.
+
+Note that the total number of queries will increase
+proportionally with the number of locations specified.
+
+Accepts cities, states/provinces, countries,
+and combinations thereof."""
+
+Q_TT = """List of search strings to use when collecting job data.
+
+Note that the total number of queries will increase
+proportionally with the number of search strings specified.
+
 Boolean operators (AND, OR, NOT), quotation marks for
 exact phrases, and parentheses for grouping are supported.
+
 Example: "software engineer" AND (python OR java) NOT intern"""
 
 
@@ -164,83 +182,71 @@ class DataSourceSelector(QWidget):
 class CollectPage(QWidget):
     def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
-        self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
         self._data_model = data_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
 
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(50)
+        self.setLayout(QGridLayout(self))
+        self.layout().setHorizontalSpacing(50)
 
         # Proxy editor
-        grid.addWidget(QHeader("Proxy Server", tooltip=P_TT), 0, 0)
+        self.layout().addWidget(QHeader("Proxy Server", tooltip=P_TT), 0, 0)
         self.p_editor = QLineEdit(placeholderText="user:pass@host:port")
         self.p_editor.setMinimumWidth(400)
         self.p_editor.setMaximumWidth(800)
-        grid.addWidget(self.p_editor, 1, 0)
+        self.layout().addWidget(self.p_editor, 1, 0)
         self.defaults["proxy"] = ""
 
         # Data source selection
-        grid.addWidget(QHeader("Data Source", tooltip=DS_TT), 0, 1)
+        self.layout().addWidget(QHeader("Data Source", tooltip=DS_TT), 0, 1)
         self.ds_selector = DataSourceSelector()
-        grid.addWidget(self.ds_selector, 1, 1)
+        self.layout().addWidget(self.ds_selector, 1, 1)
         self.defaults["data_source"] = ""
 
-        # Spacer
-        spacer0 = QWidget()
-        spacer0.setFixedHeight(20)
-        grid.addWidget(spacer0, 2, 0, 1, 2)
+        self.__add_spacer(2)
 
         # Site selection
-        grid.addWidget(QHeader("Job Sites", tooltip=S_TT), 3, 0)
+        self.layout().addWidget(QHeader("Job Sites", tooltip=S_TT), 3, 0)
         available = ["LinkedIn", "Indeed"]
         self.s_selector = QChipSelect(base_items=available,
                                       enable_creator=False)
         self.s_selector.setMinimumWidth(400)
         self.s_selector.setMaximumWidth(800)
-        grid.addWidget(self.s_selector, 4, 0)
+        self.layout().addWidget(self.s_selector, 4, 0)
         self.defaults["sites_selected"] = []
         self.defaults["sites_available"] = available
 
         # Locations editor
-        grid.addWidget(QHeader("Locations"), 3, 1)
+        self.layout().addWidget(QHeader("Locations", tooltip=L_TT), 3, 1)
         self.l_editor = QChipSelect()
-        grid.addWidget(self.l_editor, 4, 1)
+        self.layout().addWidget(self.l_editor, 4, 1)
         self.defaults["locations_selected"] = []
         self.defaults["locations_available"] = []
 
-        self.layout().addLayout(grid)
-
-        # Spacer
-        spacer1 = QWidget()
-        spacer1.setFixedHeight(20)
-        grid.addWidget(spacer1, 2, 0, 1, 2)
+        self.__add_spacer(5)
 
         # Query editor   
-        self.layout().addWidget(QHeader("Search Queries", tooltip=Q_TT))
+        self.layout().addWidget(QHeader("Search Queries", tooltip=Q_TT), 5, 0, 1, 2)
         self.q_editor = QPlainTextListEdit()
-        self.layout().addWidget(self.q_editor)
+        self.layout().addWidget(self.q_editor, 6, 0, 1, 2)
         self.defaults["queries"] = []
 
-        # Spacer
-        spacer2 = QWidget()
-        spacer2.setFixedHeight(20)
-        self.layout().addWidget(spacer2)
+        self.__add_spacer(7)
 
         # Hours old editor
-        self.layout().addWidget(QHeader("Data Freshness (Hours Old)"))
+        self.layout().addWidget(QHeader("Data Freshness (Hours Old)"), 8, 0, 1, 2)
         self.h_editor = QSpinBox(value=24, minimum=1, maximum=8760)
         self.h_editor.setFixedWidth(100)
-        self.layout().addWidget(self.h_editor)
+        self.layout().addWidget(self.h_editor, 9, 0, 1, 2)
         self.defaults["hours_old"] = 24
 
-        # Push collect button to bottom
-        self.layout().addStretch()
+        self.__add_spacer(10)
 
         # Run data collection
         self.run_btn = QPushButton("Collect Jobs")
-        self.layout().addWidget(self.run_btn)
+        self.layout().addWidget(self.run_btn, 11, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignBottom)
+        self.layout().setRowStretch(11, 1)
         self.run_btn.clicked.connect(self._on_run_clicked)
         self.run_btn.setFixedWidth(200)
         self.run_btn.setStyleSheet("margin-bottom: 20px;")
@@ -277,7 +283,13 @@ class CollectPage(QWidget):
         # Connect model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
 
-    def layout(self) -> QVBoxLayout:
+    def __add_spacer(self, row: int):
+        """ Add a vertical spacer at the given row. """
+        spacer = QWidget()
+        spacer.setFixedHeight(20)
+        self.layout().addWidget(spacer, row, 0, 1, 2)
+
+    def layout(self) -> QGridLayout:
         """ Override layout to remove type-checking errors. """
         return super().layout() # type: ignore
 
