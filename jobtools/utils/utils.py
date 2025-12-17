@@ -38,8 +38,6 @@ def get_resource_dir() -> Path:
 def get_data_sources() -> dict[str, Path]:
     """ Get available data sources from the data directory.
 
-    Listed with archive file first, then by date/time in reverse chronological order.
-
     Returns
     -------
     dict[str, str]
@@ -48,9 +46,6 @@ def get_data_sources() -> dict[str, Path]:
     data_dir = get_data_dir()
     sources = {}
     for date in data_dir.iterdir():
-        if date.name == "archive":
-            sources["Archive"] = date / "jobs_data.csv"
-            continue
         if not date.name.isdigit() or len(date.name) != 8:
             continue
         for time in date.iterdir():

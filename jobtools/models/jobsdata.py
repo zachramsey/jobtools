@@ -37,16 +37,27 @@ class JobsDataModel(QAbstractTableModel):
             - *DataFrame* : use the provided DataFrame as initial data.
             - *Path* : load data from the specified CSV file.
             - *"latest"* : load data from the most recent run.
+            - *"favorites"* : load data from the favorites data path.
             - *"archive"* : load data from the archive data path.
         """
         super().__init__()
+
+        # Specialized data sources
+        self._foobar_path = get_data_dir() / "foobar"   # Placeholder data path
+        self._arch_path = get_data_dir() / "archive"
+        os.makedirs(self._arch_path, exist_ok=True)
+        self._fav_path = get_data_dir() / "favorites"
+        os.makedirs(self._fav_path, exist_ok=True)
+        self._fav_df = pd.DataFrame()
+
+        # Internal data
         date = dt.datetime.now().strftime("%Y%m%d")
         time = dt.datetime.now().strftime('%H%M')
         self._new_path = get_data_dir() / date / time
         self._load_path = Path()
         self._modified = False
 
-        # Internal DataFrame and dynamic view
+        # Dynamic view of internal data
         self.columns: list[str] = []
         self._col_len_thresh: dict[str, int] = {}
         self._header_labels: dict[str, str] = {}
@@ -58,6 +69,7 @@ class JobsDataModel(QAbstractTableModel):
         if isinstance(data, pd.DataFrame):
             self.__pre_load()
             self._df = data.copy()
+            self.__prep_data()
             self.__post_load()
             self._logger.info(f"Initialized {len(self._df)} jobs from DataFrame.")
         else:
@@ -92,7 +104,7 @@ class JobsDataModel(QAbstractTableModel):
     @property
     def path(self) -> Path:
         """ Get the output path for saving data. """
-        if len(self._load_path.parts) > 0 and self._load_path.parts[-1] == "archive":
+        if self._load_path in [self._fav_path, self._arch_path]:
             return self._load_path
         elif self._modified or not self._load_path:
             return self._new_path
@@ -143,13 +155,6 @@ class JobsDataModel(QAbstractTableModel):
         self._header_labels = labels
         self.endResetModel()
 
-    def get_index_url(self, index: QModelIndex) -> str:
-        """ Get the posting URL for the given model index. """
-        col = self.columns[index.column()]
-        if col == "site":
-            return self._dyn_df["job_url"].iloc[index.row()]
-        return None     # type: ignore
-
     def rowCount(self, parent=QModelIndex()) -> int:
         return self._dyn_df.shape[0]
     
@@ -183,7 +188,10 @@ class JobsDataModel(QAbstractTableModel):
                 val = ", ".join(str(v) for v in val)
                 split = ", "
             if isinstance(val, bool):
-                val = "◆" if val else ""   # ╳
+                if col == "is_favorite":
+                    val = "★" if val else "☆"
+                else:
+                    val = "◆" if val else ""   # ╳
             if col in self._col_len_thresh:
                 pos = self._col_len_thresh[col]
                 val = str(val)
@@ -210,8 +218,8 @@ class JobsDataModel(QAbstractTableModel):
             if col == "site":
                 return QColor(Qt.GlobalColor.blue)
         elif role == Qt.ItemDataRole.UserRole + 1:
-            # Custom role: indicates clickable link
-            if col == "site":
+            # Custom role: indicates clickable item
+            if col in ["site", "is_favorite"]:
                 return True
         return None
     
@@ -273,6 +281,34 @@ class JobsDataModel(QAbstractTableModel):
         self.__apply_filters()
         self.__apply_sort()
         self.endResetModel()
+
+    def toggle_favorite(self, index: QModelIndex):
+        """ Toggle the 'favorite' status of the job at the given index.
+
+        Parameters
+        ----------
+        index : QModelIndex
+            Index of the job posting to toggle favorite status for.
+        """
+        job_id = self._dyn_df["id"].iloc[index.row()]
+        if self._dyn_df.at[index.row(), "is_favorite"]:
+            # Remove from favorites
+            self._fav_df = self._fav_df[self._fav_df["id"] != job_id]
+            self._dyn_df.at[index.row(), "is_favorite"] = False
+        else:
+            # Add to favorites
+            job_row = self._dyn_df[self._dyn_df["id"] == job_id]
+            if not job_row.empty:
+                self._fav_df = pd.concat([self._fav_df, job_row], ignore_index=True)
+                self._dyn_df.at[index.row(), "is_favorite"] = True
+        # Save updated favorites
+        self.export_csv(path=self._fav_path, data=self._fav_df)
+        self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole,
+                                                Qt.ItemDataRole.EditRole])
+
+    def get_index_url(self, index: QModelIndex) -> str:
+        """ Get the posting URL for the given model index. """
+        return self._dyn_df["job_url"].iloc[index.row()]
     
     #################################
     ##       Data Collection       ##
@@ -280,14 +316,23 @@ class JobsDataModel(QAbstractTableModel):
 
     def __pre_load(self):
         """ Operations to be performed before loading data. """
-        if len(self._load_path.parts) > 0 and self._load_path.parts[-1] == "data":
-            # Clear out dummy data
+        if self._load_path == self._foobar_path:
+            # Clear out placeholder data
             self._df = pd.DataFrame()
             self._load_path = Path()
         # Signal model reset
         self.beginResetModel()
 
     def __prep_data(self):
+        """ Prepare data after loading or collection. """
+        if self._df.empty:
+            return
+        # Load favorites
+        self._df["is_favorite"] = False
+        if (self._fav_path / "jobs_data.csv").exists():
+            self._fav_df = pd.read_csv(self._fav_path / "jobs_data.csv")
+            if not self._fav_df.empty:
+                self._df["is_favorite"] = self._df["id"].isin(self._fav_df["id"].values)
         # Remove escape characters from emphasis tags in descriptions
         self._df["description"] = self._df["description"].apply(
             lambda md: re.sub(r'\\*(_|\*)', r'\1', md) if isinstance(md, str) else md)
@@ -444,6 +489,7 @@ class JobsDataModel(QAbstractTableModel):
             Data source to load from.
             - *Path* : load data from the specified CSV file or directory.
             - *"latest"* : load data from the most recent run.
+            - *"favorites"* : load data from the favorites data path.
             - *"archive"* : load data from the archive data path.
         """
         if source == Path() or source == "":
@@ -451,7 +497,6 @@ class JobsDataModel(QAbstractTableModel):
         if isinstance(source, str):
             if source == "latest":
                 data_paths = get_data_sources()
-                del data_paths["Archive"]
                 source = data_paths[max(data_paths.keys())]
             else:
                 source = Path(source)
@@ -461,12 +506,14 @@ class JobsDataModel(QAbstractTableModel):
             if source.is_dir():
                 source = source / "jobs_data.csv"
         if not source.exists():
-            raise FileNotFoundError(f"Could not find data file at {source}")
+            self._logger.warning(f"Data source not found at {source}.")
+            return
+        # Load data
         self.__pre_load()
         self._df = pd.read_csv(source)
+        self.__prep_data()
         self._load_path = source.parent
         self._modified = False
-        self.__prep_data()
         self.__post_load()
         self._logger.info(f"Loaded {len(self._df)} jobs from {source}")
 
@@ -482,8 +529,8 @@ class JobsDataModel(QAbstractTableModel):
         jobs.__pre_load()
         jobs._df = pd.concat([jobs._df, other_df], ignore_index=True)
         jobs._df.reset_index(drop=True, inplace=True)
-        jobs._modified = True
         jobs.__prep_data()
+        jobs._modified = True
         jobs.drop_duplicate_jobs()
         jobs.__post_load()
         if not inplace:
@@ -815,6 +862,7 @@ class JobsDataModel(QAbstractTableModel):
     
     def export_csv(self,
                    path: Path|None = None,
+                   data: pd.DataFrame | None = None,
                    drop_derived: bool = True) -> Path:
         """ Save collected job postings to CSV file.
 
@@ -822,6 +870,8 @@ class JobsDataModel(QAbstractTableModel):
         ----------
         path : Path, optional
             Output directory to save data; if empty, uses derived path.
+        data : pd.DataFrame, optional
+            DataFrame to save; if None, uses internal DataFrame.
         drop_derived : bool, optional
             Whether to drop derived columns. That is, columns
             resulting from transformations of the original data.
@@ -834,13 +884,13 @@ class JobsDataModel(QAbstractTableModel):
         # Validate output path
         file = self.__validate_path(path, "jobs_data.csv")
         # Prepare DataFrame for saving
-        data = self._df.copy()
+        data = self._df.copy() if data is None else data.copy()
         if drop_derived:
             derived_cols = [col for col in data.columns if col not in desired_order]
             data.drop(columns=derived_cols, inplace=True)
         # Save DataFrame to CSV
         data.to_csv(file, index=False)
-        JobsDataModel._logger.info(f"Saved {len(self._df)} jobs to {file}")
+        JobsDataModel._logger.info(f"Saved {len(data)} jobs to {file}")
         return file
                 
     def export_html(self,

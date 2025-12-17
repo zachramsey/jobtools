@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QTableView, QComboBox, QPushButton,
                                QHeaderView)
 from ..models import ConfigModel, JobsDataModel
-from ..utils import get_data_dir, get_data_sources, ThemeColor, blend_colors, get_icon
+from ..utils import get_data_sources, ThemeColor, blend_colors, get_icon
 
 
 UNUSED_COLUMNS = ['id', 'job_url_direct', 'salary_source', 'interval',
@@ -48,23 +48,34 @@ class DataPage(QWidget):
         self._data_model = data_model
 
         # Initialize data model with dummy data
-        self._setup_data_model(get_data_dir() / "dummy_jobs_data.csv")
+        self._setup_data_model(self._data_model._foobar_path)
         self._data_model.set_visible_columns([
-            "date_posted", "state", "company", "title",
-            "has_ba", "has_ma", "has_phd", "keywords","site", 
+            "is_favorite", "date_posted", "state", "company", "title",
+            "has_ba", "has_ma", "has_phd", "keywords", "site", 
         ])
         self._data_model.set_column_labels({
-            # "date_posted": "Posted", "state": "Loc",
-            "has_ba": "BA ", "has_ma": "MA ", "has_phd": "PhD"
+            "is_favorite": "",
+            "date_posted": "Date Posted   ",
+            "state": "State ",
+            "company": "Company ",
+            "title": "Title  ",
+            "has_ba": "BA ",
+            "has_ma": "MA ",
+            "has_phd": "PhD"
         })
 
         # Data source selector
         data_selector_layout = QHBoxLayout()
         self.data_selector = QComboBox()
         self.data_selector.setFixedWidth(300)
-        data_sources = get_data_sources()
-        self.data_selector.addItem("Select Data Source...", Path())
-        for name, path in data_sources.items():
+        self._special_sources = {
+            "Select Data Source...": self._data_model._foobar_path / "jobs_data.csv",
+            "Favorites": self._data_model._fav_path / "jobs_data.csv",
+            "Archive": self._data_model._arch_path / "jobs_data.csv"
+        }
+        for name, path in self._special_sources.items():
+            self.data_selector.addItem(name, path)
+        for name, path in get_data_sources().items():
             self.data_selector.addItem(name, path)
         data_selector_layout.addWidget(self.data_selector)
         self.data_load = QPushButton("Load Data")
@@ -99,9 +110,8 @@ class DataPage(QWidget):
         self.table_view.setStyleSheet(f"QTableView {{ background-color: {bg_color}; alternate-background-color: {alt_color}; }}")
         self.table_view.setShowGrid(False)
         self.table_view.setSelectionMode(QTableView.SelectionMode.NoSelection)
-        self.table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.table_view.setWordWrap(True)
-        self.table_view.clicked.connect(self._on_open_job_url)
+        self.table_view.clicked.connect(self._on_clickable)
         self.layout().addWidget(self.table_view)
 
     def layout(self) -> QVBoxLayout:
@@ -149,9 +159,9 @@ class DataPage(QWidget):
         """ Refresh the list of available data sources. """
         current_text = self.data_selector.currentText()
         self.data_selector.clear()
-        data_sources = get_data_sources()
-        self.data_selector.addItem("Select Data Source...", Path())
-        for name, path in data_sources.items():
+        for name, path in self._special_sources.items():
+            self.data_selector.addItem(name, path)
+        for name, path in get_data_sources().items():
             self.data_selector.addItem(name, path)
         # Restore previous selection if possible
         index = self.data_selector.findText(current_text)
@@ -159,9 +169,13 @@ class DataPage(QWidget):
             self.data_selector.setCurrentIndex(index)
 
     @Slot()
-    def _on_open_job_url(self, index):
-        """ Open the job posting URL for the given model index. """
-        url = self._data_model.get_index_url(index)
-        if url:
-            QDesktopServices.openUrl(QUrl(url))
+    def _on_clickable(self, index):
+        """ Handle clicks on clickable cells """
+        col = self._data_model.columns[index.column()]
+        if col == "site":
+            url = self._data_model.get_index_url(index)
+            if url:
+                QDesktopServices.openUrl(QUrl(url))
+        elif col == "is_favorite":
+            self._data_model.toggle_favorite(index)
             
