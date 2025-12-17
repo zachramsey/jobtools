@@ -1,5 +1,6 @@
 # app/model.py
 import json
+from pathlib import Path
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
 from ..utils import get_config_dir
 from .jobsdata import JobsDataModel
@@ -63,7 +64,7 @@ class ConfigModel(QAbstractItemModel):
         self._root_item = TreeItem(["Property", "Value"])
 
         # Path to persistent config file
-        self._cfg_path = str(get_config_dir() / "persistent.json")
+        self._cfg_path = get_config_dir() / "persistent.json"
 
         # Auto-save on data change
         self.dataChanged.connect(lambda: self.save_to_file(self._cfg_path))
@@ -192,17 +193,17 @@ class ConfigModel(QAbstractItemModel):
             return self._root_item.data(section)
         return None
 
-    def save_to_file(self, filepath: str):
+    def save_to_file(self, filepath: Path):
         """ Save the current configuration to a JSON file. """
-        if not filepath.endswith(".json"):
+        if not filepath.suffix == ".json":
             raise ValueError(f"Filepath must point to a JSON file. Got: {filepath}")
         data = self._recursive_dump(self._root_item)
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=4)
 
-    def load_from_file(self, filepath: str):
+    def load_from_file(self, filepath: Path):
         """ Load configuration from a JSON file. """
-        if not filepath.endswith(".json"):
+        if not filepath.suffix == ".json":
             raise ValueError(f"Filepath must point to a JSON file. Got: {filepath}")
         try:
             with open(filepath, 'r') as f:

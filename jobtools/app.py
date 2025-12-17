@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QSize, Slot
 from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
 from qt_material import apply_stylesheet    # type: ignore
 from .models import ConfigModel, JobsDataModel
-from .views import (RunnerPage, CollectPage, FilterPage, SortPage,
+from .views import (CollectPage, FilterPage, SortPage,
                     DataPage, ConsolePage, SettingsPage)
 from .utils import get_resource_dir, get_icon, get_sys_theme
 
@@ -71,15 +71,13 @@ class JobToolsApp(QMainWindow):
         data_model = JobsDataModel()
 
         # Create and add pages
-        runner_page = RunnerPage(cfg_model, data_model)
         collect_page = CollectPage(cfg_model, data_model)
         filter_page = FilterPage(cfg_model, data_model)
         sort_page = SortPage(cfg_model, data_model)
         data_page = DataPage(cfg_model, data_model)
         console_page = ConsolePage()
-        settings_page = SettingsPage()
+        settings_page = SettingsPage(cfg_model)
         self.add_page(data_page, "data", "table_chart")
-        self.add_page(runner_page, "runner", "play_arrow", icon_size=36)
         self.add_page(collect_page, "collect", "search")
         self.add_page(filter_page, "filter", "filter_alt")
         self.add_page(sort_page, "sort", "sort", icon_size=40)

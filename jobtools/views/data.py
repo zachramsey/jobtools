@@ -4,7 +4,6 @@ from PySide6.QtGui import QDesktopServices, QCursor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                                QTableView, QComboBox, QPushButton,
                                QHeaderView)
-from .widgets import QHeader
 from ..models import ConfigModel, JobsDataModel
 from ..utils import get_data_dir, get_data_sources, ThemeColor, blend_colors, get_icon
 
@@ -60,7 +59,6 @@ class DataPage(QWidget):
         })
 
         # Data source selector
-        self.layout().addWidget(QHeader("Data Source"))
         data_selector_layout = QHBoxLayout()
         self.data_selector = QComboBox()
         self.data_selector.setFixedWidth(300)
