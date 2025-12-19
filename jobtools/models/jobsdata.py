@@ -6,7 +6,7 @@ import multiprocessing as mp
 import os
 import pandas as pd
 from pathlib import Path
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal
 from PySide6.QtGui import QColor, QFont
 import queue
 import re
@@ -20,6 +20,8 @@ from ..utils import (HTMLBuilder, JDLogger, parse_degrees,
 
 class JobsDataModel(QAbstractTableModel):
     """ Wrapper around jobspy API to collect and process job postings. """
+
+    collectStarted = Signal()
 
     _logger = JDLogger()
     _converter = MarkdownConverter(
@@ -402,6 +404,9 @@ class JobsDataModel(QAbstractTableModel):
         int
             Number of job postings collected.
         """
+        # Signal that collection has started
+        self.collectStarted.emit()
+        # Set up cancellation check
         if cancel_event is None:
             cancel_check = lambda: False  # noqa: E731
         else:

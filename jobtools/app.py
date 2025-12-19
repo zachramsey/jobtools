@@ -88,6 +88,10 @@ class JobToolsApp(QMainWindow):
         if self.nav_panel.btn_group.buttons():
             self.nav_panel.btn_group.buttons()[0].click()
 
+        # Go to console page when collection starts
+        data_model.collectStarted.connect(
+            lambda: self.nav_panel.btn_group.buttons()[4].click())
+
         # Load config from last session
         cfg_model.load_last_config()
         data_page._on_load_data_source()
