@@ -8,13 +8,16 @@ __all__ = [
 ]
 
 from enum import Enum
+from PySide6.QtCore import Qt, QEvent, Slot, QPoint, QRect, QSize, Signal, QUrl
+from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWidgets import (
     QWidget, QWidgetItem, QSizePolicy, QVBoxLayout, QHBoxLayout,
     QPlainTextEdit, QPushButton, QLayout, QFrame, QLineEdit,
     QStackedLayout, QMenu, QCheckBox, QLabel
 )
-from PySide6.QtCore import Qt, QEvent, Slot, QPoint, QRect, QSize, Signal
 from ..utils import get_icon
+from ..utils.logger import JDLogger
 
 
 class QHeader(QWidget):
@@ -47,6 +50,37 @@ class QHeader(QWidget):
             self.layout().addWidget(help)   # type: ignore
         self.layout().addStretch()          # type: ignore
 
+
+class QWebImageLabel(QLabel):
+    """ QLabel that loads and displays an image from a web URL. """
+
+    def __init__(self, url: str):
+        """ Initialize the web image label.
+
+        Parameters
+        ----------
+        url : str
+            URL of the image to load.
+        """
+        super().__init__()
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setText("Loading...")
+        
+        self._manager = QNetworkAccessManager(self)
+        self._manager.finished.connect(self._on_finished)
+        self._manager.get(QNetworkRequest(QUrl(url)))
+        
+    @Slot(QNetworkReply)
+    def _on_finished(self, reply: QNetworkReply):
+        """ Handle the finished network reply. """
+        if reply.error() != QNetworkReply.NetworkError.NoError:
+            JDLogger().warning(f"Failed to load image from URL: {reply.errorString()}")
+            self.setText("Failed to load image.")
+            return
+        image = QImage()
+        image.loadFromData(reply.readAll())
+        pixmap = QPixmap.fromImage(image)
+        self.setPixmap(pixmap)
 
 
 class QAdaptivePlainTextEdit(QPlainTextEdit):

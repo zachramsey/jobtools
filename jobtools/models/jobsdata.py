@@ -222,7 +222,7 @@ class JobsDataModel(QAbstractTableModel):
                 return QColor(Qt.GlobalColor.blue)
         elif role == Qt.ItemDataRole.UserRole + 1:
             # Custom role: indicates clickable item
-            if col in ["site", "title", "is_favorite"]:
+            if col in ["site", "company", "title", "is_favorite"]:
                 return True
         return None
     
