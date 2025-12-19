@@ -3,6 +3,7 @@ from jobspy import scrape_jobs, desired_order       # type: ignore
 from markdownify import MarkdownConverter           # type: ignore
 from markdownify import ATX, SPACES, UNDERSCORE     # type: ignore
 import multiprocessing as mp
+import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
@@ -221,7 +222,7 @@ class JobsDataModel(QAbstractTableModel):
                 return QColor(Qt.GlobalColor.blue)
         elif role == Qt.ItemDataRole.UserRole + 1:
             # Custom role: indicates clickable item
-            if col in ["site", "is_favorite"]:
+            if col in ["site", "title", "is_favorite"]:
                 return True
         return None
     
@@ -307,6 +308,12 @@ class JobsDataModel(QAbstractTableModel):
         self.export_csv(path=self._fav_path, data=self._fav_df)
         self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole,
                                                 Qt.ItemDataRole.EditRole])
+        
+    def get_job_data(self, index: QModelIndex) -> dict:
+        """ Get the job data as a dictionary for the given model index. """
+        data = self._dyn_df.iloc[index.row()].copy()
+        data.replace({pd.NA: None, np.nan: None}, inplace=True)
+        return data.to_dict()
 
     def get_index_url(self, index: QModelIndex) -> str:
         """ Get the posting URL for the given model index. """
@@ -429,7 +436,7 @@ class JobsDataModel(QAbstractTableModel):
                           description_format="html",
                           linkedin_fetch_description=True,
                           hours_old=hours_old,
-                          enforce_annual_salary=True)
+                          enforce_annual_salary=False)
             # Set up multiprocessing queue and process
             q: mp.Queue = mp.Queue()
             p = mp.Process(target=self.__scrape_jobs_worker, args=(q, kwargs))
