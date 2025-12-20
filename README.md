@@ -1,9 +1,17 @@
-JobTools
+Documentation in progress :)
 
 ---
 
-Like many of the software projects I spend my free time on, the scope of JobTools has ballooned well beyond the original intention.
+**JobTools** is a platform to help job-seekers spend less time searching and more time applying!
 
-What was once a simple script to collect and display jobs in an html table has become a full-fledged platform for collecting, filtering, sorting, and viewing job listings in a sleek, user-friendly GUI.
+---
 
-This project is under active development and not yet ready for a full release. Check back soon!
+|                                                     |                                                     |
+| --------------------------------------------------- | --------------------------------------------------- |
+| ![Search Page](assets/dark/search-page.png)         | **Search Configuration Page**<ul><li>TBD</li></ul> |
+| ![Filter Page](assets/dark/filter-page.png)         | **Filter Configuration Page**<ul><li>TBD</li></ul>  |
+| ![Sorting Page](assets/dark/sort-page.png)          | **Sorting Configuration Page**<ul><li>TBD</li></ul>  |
+| ![Settings Page](assets/dark/settings-page.png)     | **Settings Page**<ul><li>TBD</li></ul>  |
+| ![Jobs Viewer](assets/dark/data-table.png)          | **Jobs Data Viewer**<ul><li>TBD</li></ul>  |
+| ![Job Details](assets/dark/job-details.png)         | **Job Details Viewer**<ul><li>TBD</li></ul>  |
+| ![Company Details](assets/dark/company-details.png) | **Company Details Viewer**<ul><li>TBD</li></ul>  |
