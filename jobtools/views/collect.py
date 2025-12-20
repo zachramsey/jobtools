@@ -71,6 +71,8 @@ class CollectionWorker(QObject):
             Emitted with the error message if an exception occurs.
         """
         try:
+            # Signal that collection has started
+            self._data_model.collectStarted.emit()
             # Initialize JobsData
             source = self._config.get("data_source", "")
             if source:
@@ -102,6 +104,7 @@ class CollectionWorker(QObject):
                 self.finished.emit("")
             else:
                 self.finished.emit(str(csv_path))
+                self._data_model.collectFinished.emit(str(csv_path))
         except Exception:
             self.error.emit(traceback.format_exc())
 

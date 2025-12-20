@@ -64,6 +64,10 @@ def clean_description(md: str) -> str:
     pat = r"^(?!\s*\* )\s*_+(.+?)\:\s+(.+?)_+\s*$"
     rep = r"\n### \1\n\n\2\n"
     md = re.sub(pat, rep, md, flags=re.MULTILINE)
+    # Make header from [ {h} :* {t} ]
+    pat = r"^(?!\s*\* )\s*(.{3,}?)\:(\*\s+)(.+?)\s*$"
+    rep = r"\n### \1\n\n\2\3\n"
+    md = re.sub(pat, rep, md, flags=re.MULTILINE)
     # Make header from [ {h} : {t} ]
     pat = r"^(?!\s*\* )\s*(.{3,}?)\:\s+(.+?)\s*$"
     rep = r"\n### \1\n\n\2\n"

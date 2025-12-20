@@ -276,6 +276,11 @@ class DataPage(QWidget):
         data_selector_layout.addWidget(self.data_refresh)
         data_selector_layout.addStretch()
         self.layout().addLayout(data_selector_layout)
+        
+        # HACK: This is a stupid workaround to update the data model after collection.
+        #       Seems like the data should update automatically, since it is loaded
+        #       from the same JobsDataModel instance. Will investigate later.
+        self._data_model.collectFinished.connect(self._setup_data_model)
 
         # Data table view
         self.table_view = HoverTableView()

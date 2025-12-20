@@ -23,6 +23,7 @@ class JobsDataModel(QAbstractTableModel):
     """ Wrapper around jobspy API to collect and process job postings. """
 
     collectStarted = Signal()
+    collectFinished = Signal(str)
 
     _logger = JDLogger()
     _converter = MarkdownConverter(
@@ -411,8 +412,6 @@ class JobsDataModel(QAbstractTableModel):
         int
             Number of job postings collected.
         """
-        # Signal that collection has started
-        self.collectStarted.emit()
         # Set up cancellation check
         if cancel_event is None:
             cancel_check = lambda: False  # noqa: E731
