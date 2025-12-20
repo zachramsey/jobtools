@@ -10,7 +10,7 @@ class JDLogger:
 
     def __init__(self):
         """ Get the JobData logger instance. """
-        self.logger = logging.getLogger("JobData")
+        self.logger = logging.getLogger("JobTools")
 
     def configure(self, level):
         """ Configure the JDLogger instance. """

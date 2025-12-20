@@ -516,7 +516,11 @@ class JobsDataModel(QAbstractTableModel):
             if source.is_dir():
                 source = source / "jobs_data.csv"
         if not source.exists():
-            self._logger.warning(f"Data source not found at {source}.")
+            if get_data_dir() in source.parents:
+                source_str = source.relative_to(get_data_dir())
+            else:
+                source_str = source
+            self._logger.warning(f"Data source not found at {source_str}.")
             return
         # Load data
         self.__pre_load()
@@ -525,7 +529,11 @@ class JobsDataModel(QAbstractTableModel):
         self._load_path = source.parent
         self._modified = False
         self.__post_load()
-        self._logger.info(f"Loaded {len(self._df)} jobs from {source}")
+        if get_data_dir() in source.parents:
+            source_str = source.relative_to(get_data_dir())
+        else:
+            source_str = source
+        self._logger.info(f"Loaded {len(self._df)} jobs from {source_str}")
 
     def update(self, other, inplace: bool = True):
         """ Update this `JobsData` instance with another `JobsData` or DataFrame. """
@@ -817,7 +825,11 @@ class JobsDataModel(QAbstractTableModel):
             data.drop(columns=derived_cols, inplace=True)
         # Save DataFrame to CSV
         data.to_csv(file, index=False)
-        JobsDataModel._logger.info(f"Saved {len(data)} jobs to {file}")
+        if get_data_dir() in file.parents:
+            file_str = file.relative_to(get_data_dir())
+        else:
+            file_str = file
+        JobsDataModel._logger.info(f"Saved {len(data)} jobs to {file_str}")
         return file
                 
     def export_html(self,
@@ -856,5 +868,9 @@ class JobsDataModel(QAbstractTableModel):
         # Save HTML string to file
         with open(file, "w", encoding="utf-8") as f:
             f.write(html_str)
-        JobsDataModel._logger.info(f"Exported {len(self._df)} jobs to {file}")
+        if get_data_dir() in file.parents:
+            file_str = file.relative_to(get_data_dir())
+        else:
+            file_str = file
+        JobsDataModel._logger.info(f"Exported {len(self._df)} jobs to {file_str}")
         return file
