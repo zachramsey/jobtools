@@ -1,13 +1,59 @@
-**JobTools** is a platform to help job-seekers spend less time searching and more time applying!
+# JobTools
+
+**JobTools** is a privacy-focused desktop application to boost your job search. Built around the [**JobSpy**](https://github.com/speedyapply/JobSpy) job scraping library, JobTools makes finding your next role easier with a sleek GUI and a growing suite of tools to manage your leads.
 
 ---
 
-|                                                     |                                                     |
-| --------------------------------------------------- | --------------------------------------------------- |
-| ![Search Page](assets/dark/search-page.png)         | <h3>Collection Configuration Page</h3><br><ul><li>Choose existing data to update</li><li>Select which job sites to query</li><li>Add and manage geographical locations to search</li><li>Enter multiple search queries (supports boolean expressions)</li><li>Set the maximum hours ago collected jobs were posting</li></ul> |
-| ![Filter Page](assets/dark/filter-page.png)         | <h3>Filter Configuration Page</h3><br><ul><li>Select which work models to include in results</li><li>Select which job types to include in results</li><li>Manage terms whose presence or absence in job titles or job descriptions will exclude jobs from results</li><li>Apply filters in real time to the dataset</li></ul> |
-| ![Sorting Page](assets/dark/sort-page.png)          | <h3>Sorting Configuration Page</h3><br><ul><li>Preset and manual selection of values to weight degree levels</li><li>Define preferred location order with chip selector (currently only configured for US states)</li><li>Define sets of terms at multiple weights levels whose presence in job postings will adjust their ranking</li><li>Live update of scoring and ordering based on selections</li></ul> |
-| ![Settings Page](assets/dark/settings-page.png)     | <h3>Settings Page</h3><br><ul><li>Load saved configuration files from dropdown</li><li>Save current configuration with a custom name</li><li>Edit global proxy server setting</li></ul> |
-| ![Jobs Viewer](assets/dark/data-table.png)          | <h3>Jobs Data Viewer</h3><br><ul><li>Select and load data collections from dropdown</li><li>Toggle favorites directly from the table</li><li>Click the job title of a listing to view job details (See below)</li><li>Click the company of a listing to view company details (See below)</li><li>Click job site to open the job posting URL</li></ul> |
-| ![Job Details](assets/dark/job-details.png)         | <h3>Job Details Dialog</h3><br><ul><li>Links to job-board posting and direct company posting when available</li><li>Shows date posted, title, company, location, and work model</li><li>Displays job function, type, level, and compensation</li><li>Displays the full formatted job description</li></ul> |
-| ![Company Details](assets/dark/company-details.png) | <h3>Company Details Dialog</h3><br><ul><li>Links to job-board company page and company website when available</li><li>Displays company logo and name prominently</li><li>Shows industry, description, headcount, and revenue if present</li><li>Lists company addresses and other contact details in a readable layout</li></ul> |
+## Features
+
+#### Searching
+
+- Support for scraping through a proxy
+- Specify the maximum time since jobs were posted
+- Specify multiple job sites, geographical locations, and search queries
+- Run all permutations of site, location, and query in a single click
+
+#### Filtering
+
+- Select which work models and job types to include in results
+- Specify requisite and backlist terms for job titles and descriptions
+- Apply filters in real time to the active dataset
+
+#### Sorting
+
+- Apply weight to degree levels (BA/MA/PhD) mentioned in postings
+- Set location priority order (currently only supports US states)
+- Specify sets of terms at multiple weights levels to adjust job priority by term presence
+- View ordering of the active dataset in real time based on selections
+
+#### Jobs Data Viewer
+
+- Load data from past collection runs, your favorites, or a full archive of collected data
+- Add jobs to your favorites directly from the table
+- Click the job title of a listing to view full details about the job, including:
+    - Link to job-board posting, and link to direct company posting when available
+    - Date posted, title, company, location, and work model
+    - Job function, type, level, and compensation when available
+    - The full formatted job description
+- Click the company of a listing to view full company details, including:
+    - Link to company page on the job-board, and link to company website when available
+    - Company logo and name
+    - Industry, description, headcount, and revenue when available
+    - Company addresses and other contact details
+
+#### Configurations
+
+- Save your current configuration with a custom name
+- Load saved configurations
+
+---
+
+## Installation
+
+### Stable Release
+
+*Packaged binary releases are planned but not yet available.*
+
+### From Source
+
+TBD
