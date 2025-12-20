@@ -76,7 +76,7 @@ class JobToolsApp(QMainWindow):
         sort_page = SortPage(cfg_model, data_model)
         data_page = DataPage(cfg_model, data_model)
         console_page = ConsolePage()
-        settings_page = SettingsPage(cfg_model)
+        settings_page = SettingsPage(cfg_model, data_model)
         self.add_page(data_page, "data", "table_chart")
         self.add_page(collect_page, "collect", "search")
         self.add_page(filter_page, "filter", "filter_alt")

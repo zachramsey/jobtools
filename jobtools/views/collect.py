@@ -1,20 +1,10 @@
-from PySide6.QtWidgets import (QWidget, QHBoxLayout, QGridLayout,
+from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout,
                                QRadioButton, QLineEdit, QSpinBox, QPushButton)
 from PySide6.QtCore import QModelIndex, Qt, Signal, Slot, QObject, QThread
 from threading import Event
 import traceback
 from ..models import ConfigModel, JobsDataModel
 from .widgets import QHeader, QPlainTextListEdit, QChipSelect
-
-
-P_TT = """Optional proxy server for web requests.
-
-Highly recommended!
-
-The job collector makes many requests in a short
-period, which may trigger anti-bot protections on
-job sites. Using a proxy will distribute these
-requests and help avoid IP blocking."""
 
 DS_TT = """Select the source of job data to load.
 
@@ -135,7 +125,7 @@ class DataSourceSelector(QWidget):
             btn.setFixedWidth(max_width + 10)
         # Manual path input
         self.path_input = QLineEdit()
-        self.path_input.setFixedWidth(400)
+        self.path_input.setFixedWidth(200)
         self.path_input.setPlaceholderText("Subdirectory path...")
         self.path_input.setEnabled(False)
         self.radio_manual.toggled.connect(self.path_input.setEnabled)
@@ -189,85 +179,84 @@ class CollectPage(QWidget):
         self._data_model = data_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
-
-        self.setLayout(QGridLayout(self))
-        self.layout().setHorizontalSpacing(50)
-
-        # Proxy editor
-        self.layout().addWidget(QHeader("Proxy Server", tooltip=P_TT), 0, 0)
-        self.p_editor = QLineEdit(placeholderText="user:pass@host:port")
-        self.p_editor.setMinimumWidth(400)
-        self.p_editor.setMaximumWidth(800)
-        self.layout().addWidget(self.p_editor, 1, 0)
-        self.defaults["proxy"] = ""
+        self.setLayout(QVBoxLayout(self))
+        self.layout().setSpacing(20)
 
         # Data source selection
-        self.layout().addWidget(QHeader("Data Source", tooltip=DS_TT), 0, 1)
+        ds_layout = QHBoxLayout()
+        ds_header = QHeader("Data Source", tooltip=DS_TT)
+        ds_header.setFixedWidth(200)
+        ds_layout.addWidget(ds_header)
         self.ds_selector = DataSourceSelector()
-        self.layout().addWidget(self.ds_selector, 1, 1)
+        ds_layout.addWidget(self.ds_selector, 1)
+        self.layout().addLayout(ds_layout)
         self.defaults["data_source"] = ""
 
-        self.__add_spacer(2)
-
         # Site selection
-        self.layout().addWidget(QHeader("Job Sites", tooltip=S_TT), 3, 0)
+        s_layout = QHBoxLayout()
+        s_header = QHeader("Job Sites", tooltip=S_TT)
+        s_header.setFixedWidth(200)
+        s_layout.addWidget(s_header)
         available = ["LinkedIn", "Indeed"]
-        self.s_selector = QChipSelect(base_items=available,
-                                      enable_creator=False)
-        self.s_selector.setMinimumWidth(400)
-        self.s_selector.setMaximumWidth(800)
-        self.layout().addWidget(self.s_selector, 4, 0)
+        self.s_selector = QChipSelect(base_items=available, enable_creator=False)
+        s_layout.addWidget(self.s_selector, 1)
+        self.layout().addLayout(s_layout)
         self.defaults["sites_selected"] = []
         self.defaults["sites_available"] = available
 
         # Locations editor
-        self.layout().addWidget(QHeader("Locations", tooltip=L_TT), 3, 1)
+        l_layout = QHBoxLayout()
+        l_header = QHeader("Locations", tooltip=L_TT)
+        l_header.setFixedWidth(200)
+        l_layout.addWidget(l_header)
         self.l_editor = QChipSelect()
-        self.layout().addWidget(self.l_editor, 4, 1)
+        l_layout.addWidget(self.l_editor, 1)
+        self.layout().addLayout(l_layout)
         self.defaults["locations_selected"] = []
         self.defaults["locations_available"] = []
 
-        self.__add_spacer(5)
-
-        # Query editor   
-        self.layout().addWidget(QHeader("Search Queries", tooltip=Q_TT), 5, 0, 1, 2)
+        # Query editor
+        q_layout = QVBoxLayout()
+        q_layout.setSpacing(0)
+        q_layout.addWidget(QHeader("Search Queries", tooltip=Q_TT))
         self.q_editor = QPlainTextListEdit()
-        self.layout().addWidget(self.q_editor, 6, 0, 1, 2)
+        q_layout.addWidget(self.q_editor)
+        self.layout().addLayout(q_layout)
         self.defaults["queries"] = []
 
-        self.__add_spacer(7)
-
         # Hours old editor
-        self.layout().addWidget(QHeader("Data Freshness (Hours Old)"), 8, 0, 1, 2)
+        h_layout = QVBoxLayout()
+        h_layout.setSpacing(0)
+        h_header = QHeader("Data Freshness (Hours Old)")
+        h_layout.addWidget(h_header)
         self.h_editor = QSpinBox(value=24, minimum=1, maximum=8760)
         self.h_editor.setFixedWidth(100)
-        self.layout().addWidget(self.h_editor, 9, 0, 1, 2)
+        h_layout.addWidget(self.h_editor)
+        self.layout().addLayout(h_layout)
         self.defaults["hours_old"] = 24
 
-        self.__add_spacer(10)
+        # Push collect button to bottom
+        self.layout().addStretch()
 
         # Run data collection
         self.run_btn = QPushButton("Collect Jobs")
-        self.layout().addWidget(self.run_btn, 11, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignBottom)
-        self.layout().setRowStretch(11, 1)
+        self.layout().addWidget(self.run_btn)
         self.run_btn.clicked.connect(self._on_run_clicked)
         self.run_btn.setFixedWidth(200)
         self.run_btn.setStyleSheet("margin-bottom: 20px;")
         self.run_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        # Register page with model
+        # Register page with config model
         root_index = self._config_model.register_page("collect", self.defaults)
 
-        # Map property keys to model indices
+        # Map keys to config model indices
         for row in range(self._config_model.rowCount(root_index)):
             idx = self._config_model.index(row, 0, root_index)
             key = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
             val_idx = self._config_model.index(row, 1, root_index)
             self._idcs[key] = val_idx
 
-        # Connect view to data model
-        self.p_editor.textChanged.connect(
-            lambda t: self._update_config("proxy", t))
+        # Connect view to config model
         self.ds_selector.sourceChanged.connect(
             lambda t: self._update_config("data_source", t))
         self.s_selector.selectionChanged.connect(
@@ -283,16 +272,10 @@ class CollectPage(QWidget):
         self.h_editor.valueChanged.connect(
             lambda n: self._update_config("hours_old", n))
         
-        # Connect model to view updates
+        # Connect config model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
 
-    def __add_spacer(self, row: int):
-        """ Add a vertical spacer at the given row. """
-        spacer = QWidget()
-        spacer.setFixedHeight(20)
-        self.layout().addWidget(spacer, row, 0, 1, 2)
-
-    def layout(self) -> QGridLayout:
+    def layout(self) -> QVBoxLayout:
         """ Override layout to remove type-checking errors. """
         return super().layout() # type: ignore
 
@@ -314,11 +297,6 @@ class CollectPage(QWidget):
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """ Update view when model data changes. """
-        # Proxy
-        val = self.__get_value("proxy", top_left)
-        if val is not None and val != self.p_editor.text().strip():
-            self.p_editor.setText(val)
-
         # Data source
         val = self.__get_value("data_source", top_left)
         if val is not None and val != self.ds_selector.get_source():

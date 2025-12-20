@@ -5,11 +5,15 @@ from ..models import ConfigModel, JobsDataModel
 from ..utils.location_parser import NAME_TO_ABBR
 
 
-DV_TT = """Adjust sorting values based on degree levels.\n
+DV_TT = """Adjust sorting values based on degree levels.
+
 Higher values increase the ranking of jobs requiring the corresponding degree.
-You can select preset options or manually set values for each degree level."""
+
+The value for each degree level may be set manually or a preset may be
+selected whose values weight the job ordering toward that degree level."""
 
 LO_TT = """Define the order of preferred job locations.
+
 Jobs located in higher-priority locations will receive better sorting values."""
 
 HE_TT = """Terms whose presence in job listings will significantly
@@ -149,25 +153,32 @@ class DegreeValueSelector(QWidget):
 class SortPage(QWidget):
     def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
-        self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
         self._data_model = data_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
+        self.setLayout(QVBoxLayout(self))
+        self.layout().setSpacing(20)
 
         # Degree value selection
-        self.layout().addWidget(
-            QHeader("Degree Value Adjustments", tooltip=DV_TT))
+        dv_layout = QHBoxLayout()
+        dv_header = QHeader("Degree Values", tooltip=DV_TT)
+        dv_header.setFixedWidth(200)
+        dv_layout.addWidget(dv_header)
         self.dv_selector = DegreeValueSelector()
-        self.layout().addWidget(self.dv_selector)
+        dv_layout.addWidget(self.dv_selector, 1)
+        self.layout().addLayout(dv_layout)
         self.defaults["degree_values"] = (0, 0, 0)
 
         # Location order selection
-        self.layout().addWidget(QHeader("Location Order", tooltip=LO_TT))
+        lo_layout = QVBoxLayout()
+        lo_layout.setSpacing(0)
+        lo_header = QHeader("Location Order", tooltip=LO_TT)
+        lo_layout.addWidget(lo_header)
         available = [abbr.upper() for abbr in NAME_TO_ABBR.values()]
-        self.lo_selector = QChipSelect(base_items=available,
-                                       enable_creator=False)
-        self.layout().addWidget(self.lo_selector)
+        self.lo_selector = QChipSelect(base_items=available, enable_creator=False)
+        lo_layout.addWidget(self.lo_selector)
+        self.layout().addLayout(lo_layout)
         self.defaults["location_order_selected"] = []
         self.defaults["location_order_available"] = available
 
@@ -179,10 +190,13 @@ class SortPage(QWidget):
                   -1: ("Deemphasized Terms (-1)", DE_TT)}
         self.te_selectors: dict[int, QChipSelect] = {}
         for value, (label, tooltip) in levels.items():
-            self.layout().addWidget(QHeader(label, tooltip=tooltip))
+            te_layout = QVBoxLayout()
+            te_layout.setSpacing(0)
+            te_layout.addWidget(QHeader(label, tooltip=tooltip))
             selector = QChipSelect()
             self.te_selectors[value] = selector
-            self.layout().addWidget(selector)
+            te_layout.addWidget(selector)
+            self.layout().addLayout(te_layout)
             self.defaults[f"terms_selected_{str(value)}"] = []
             self.defaults[f"terms_available_{str(value)}"] = []
 
@@ -192,7 +206,7 @@ class SortPage(QWidget):
         # Register page with config model
         root_index = self._config_model.register_page("sort", self.defaults)
 
-        # Map property keys to config model indices
+        # Map keys to config model indices
         for row in range(self._config_model.rowCount(root_index)):
             idx = self._config_model.index(row, 0, root_index)
             key = self._config_model.data(idx)

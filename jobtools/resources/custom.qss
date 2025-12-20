@@ -29,9 +29,17 @@ QPushButton.help-button {{
     padding: 0px;
 }}
 
+QLabel, QCheckBox, QRadioButton, QComboBox, QLineEdit, QPlainTextEdit, QTextEdit {{
+    font-size: 14px;
+}}
+
+QTextEdit {{
+    font-size: 14px;
+    color: {QTMATERIAL_PRIMARYTEXTCOLOR};
+}}
+
 .log-panel QTextEdit {{
     font-family: "Roboto Mono", monospace;
-    font-size: 12px;
 }}
 
 .data-table QHeaderView {{

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtCore import QModelIndex, Qt, Slot
 from jobspy.model import JobType    # type: ignore
 from .widgets import QHeader, QChipSelect, QCheckBoxSelect
@@ -37,63 +37,84 @@ Accepts single words, multi-word phrases, and regular expressions."""
 class FilterPage(QWidget):
     def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
-        self.setLayout(QVBoxLayout(self))
         self._config_model = config_model
         self._data_model = data_model
         self._idcs: dict[str, QModelIndex] = {}
         self.defaults: dict = {}
+        self.setLayout(QVBoxLayout(self))
+        self.layout().setSpacing(20)
 
-        # Wok model selector
-        self.layout().addWidget(QHeader("Work Model", tooltip=WM_TT))
+        # Work model selector
+        wm_layout = QHBoxLayout()
+        wm_header = QHeader("Work Model", tooltip=WM_TT)
+        wm_header.setFixedWidth(200)
+        wm_layout.addWidget(wm_header)
         self.wm_selector = QCheckBoxSelect(["remote", "onsite"])
-        self.layout().addWidget(self.wm_selector)
+        wm_layout.addWidget(self.wm_selector, 1)
+        self.layout().addLayout(wm_layout)
         self.defaults["work_models"] = []
 
         # Job type selector
-        self.layout().addWidget(QHeader("Job Types", tooltip=JT_TT))
+        jt_layout = QHBoxLayout()
+        jt_header = QHeader("Job Types", tooltip=JT_TT)
+        jt_header.setFixedWidth(200)
+        jt_layout.addWidget(jt_header)
         self.jt_selector = QCheckBoxSelect([jt.value[0] for jt in JobType])
-        self.layout().addWidget(self.jt_selector)
+        jt_layout.addWidget(self.jt_selector, 1)
+        self.layout().addLayout(jt_layout)
         self.defaults["job_types"] = []
 
         # Title exclude editor
-        self.layout().addWidget(
-            QHeader("Title Term Exclusions", tooltip=TE_TT))    
+        te_layout = QVBoxLayout()
+        te_layout.setSpacing(0)
+        te_header = QHeader("Title Term Exclusions", tooltip=TE_TT)
+        te_layout.addWidget(te_header)
         self.te_editor = QChipSelect()
-        self.layout().addWidget(self.te_editor)
+        te_layout.addWidget(self.te_editor)
+        self.layout().addLayout(te_layout)
         self.defaults["title_exclude_selected"] = []
         self.defaults["title_exclude_available"] = []
 
         # Title require editor
-        self.layout().addWidget(
-            QHeader("Title Term Requirements", tooltip=TR_TT))
+        tr_layout = QVBoxLayout()
+        tr_layout.setSpacing(0)
+        tr_header = QHeader("Title Term Requirements", tooltip=TR_TT)
+        tr_layout.addWidget(tr_header)
         self.tr_editor = QChipSelect()
-        self.layout().addWidget(self.tr_editor)
+        tr_layout.addWidget(self.tr_editor)
+        self.layout().addLayout(tr_layout)
         self.defaults["title_require_selected"] = []
         self.defaults["title_require_available"] = []
 
         # Description exclude editor
-        self.layout().addWidget(
-            QHeader("Description Term Exclusions", tooltip=DE_TT))
+        de_layout = QVBoxLayout()
+        de_layout.setSpacing(0)
+        de_header = QHeader("Description Term Exclusions", tooltip=DE_TT)
+        de_layout.addWidget(de_header)
         self.de_editor = QChipSelect()
-        self.layout().addWidget(self.de_editor)
+        de_layout.addWidget(self.de_editor)
+        self.layout().addLayout(de_layout)
         self.defaults["descr_exclude_selected"] = []
         self.defaults["descr_exclude_available"] = []
 
         # Description require editor
-        self.layout().addWidget(
-            QHeader("Description Term Requirements", tooltip=DR_TT))
+        dr_layout = QVBoxLayout()
+        dr_layout.setSpacing(0)
+        dr_header = QHeader("Description Term Requirements", tooltip=DR_TT)
+        dr_layout.addWidget(dr_header)
         self.dr_editor = QChipSelect()
-        self.layout().addWidget(self.dr_editor)
+        dr_layout.addWidget(self.dr_editor)
+        self.layout().addLayout(dr_layout)
         self.defaults["descr_require_selected"] = []
         self.defaults["descr_require_available"] = []
 
         # Push content to top
         self.layout().addStretch()
 
-        # Register page with model
+        # Register page with config model
         root_index = self._config_model.register_page("filter", self.defaults)
 
-        # Map property keys to model indices
+        # Map keys to config model indices
         for row in range(self._config_model.rowCount(root_index)):
             idx = self._config_model.index(row, 0, root_index)
             key = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
