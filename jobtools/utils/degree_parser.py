@@ -3,7 +3,6 @@ __all__ = ["parse_degrees"]
 
 import re
 
-
 # _hs_pat = re.compile(
 #     r'''
 #     \b(?:
@@ -34,7 +33,7 @@ import re
 
 
 _ba_pat = re.compile(
-    r'''
+    r"""
     \b(?:
         b\.?a\.?|               # BA
         b\.?s\.?|               # BS
@@ -50,13 +49,13 @@ _ba_pat = re.compile(
         university\s+degree|    # University degree
         degree\s+in\s+\w+       # Degree in [field]
     )\b
-    ''',
+    """,
     re.VERBOSE | re.IGNORECASE
 )
 
 
 _ma_pat = re.compile(
-    r'''
+    r"""
     \b(?:
         m\.?a\.?|               # MA
         m\.?s\.?|               # MS
@@ -70,25 +69,25 @@ _ma_pat = re.compile(
         advanced\s+degree|      # "Advanced degree"
         post-?graduate          # Post-graduate
     )\b
-    ''',
+    """,
     re.VERBOSE | re.IGNORECASE
 )
 
 
 _phd_pat = re.compile(
-    r'''
+    r"""
     \b(?:
         ph\.?d\.?|              # PhD, Ph.D.
         doctor(?:ate|al)|       # Doctorate, Doctoral
         jd|md|edd|dphil         # Professional doctorates
     )\b
-    ''',
+    """,
     re.VERBOSE | re.IGNORECASE
 )
 
 
 def parse_degrees(text: str) -> tuple[bool, bool, bool]:
-    """ Parse text for degree requirements.
+    """Parse text for degree requirements.
 
     Parameters
     ----------
@@ -102,7 +101,7 @@ def parse_degrees(text: str) -> tuple[bool, bool, bool]:
     """
     text = str(text)
     # Handle "BS/MS" cases
-    clean_text = text.replace('/', ' ')
+    clean_text = text.replace("/", " ")
     # Check each degree level
     has_bachelor = bool(_ba_pat.search(clean_text))
     has_master = bool(_ma_pat.search(clean_text))

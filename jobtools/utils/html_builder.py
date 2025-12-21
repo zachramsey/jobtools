@@ -1,8 +1,6 @@
 __all__ = ["HTMLBuilder"]
 
-
-import pandas as pd
-from pandas.api.types import is_datetime64_any_dtype, is_string_dtype
+import pandas as pd  # type: ignore
 
 # Behold my assortment of unicode arrows!
 # ⧫ ▲ ▼ | 🮮 🮦 🮧 | 🡙 🡑 🡓 | ↕ ↑ ↓ | ⭥ ⭡ ⭣ | ⮁ ⮅ ⮇ | ◆ ⏶ ⏷ ⬘ ⬙ | ⇕ ⇑ ⇓ | ⇳ ⇧ ⇩ | ⥮ ⥣ ⥥ | ⬍ 🠭 🠯
@@ -101,7 +99,7 @@ HTML_OPEN = """
         color: #7858DD;
       }
     </style>
-"""
+"""  # noqa: E501
 
 SCRIPT = """
     <script>
@@ -112,11 +110,11 @@ SCRIPT = """
         table.querySelectorAll('th[data-sort-key]').forEach(th => {
           const colIndex = th.cellIndex;
           const sortState = table._sortHierarchy.find(s => s.index === colIndex);
-          
+
           const upArrow = th.querySelector('.sort-arrow.up');
           const downArrow = th.querySelector('.sort-arrow.down');
           const rankSpan = th.querySelector('.sort-rank');
-          
+
           // Reset all
           upArrow.classList.remove('active');
           downArrow.classList.remove('active');
@@ -133,7 +131,7 @@ SCRIPT = """
               downArrow.classList.add('active');
               upArrow.classList.add('inactive');
             }
-            
+
             // Set the rank number (1-based index)
             const rank = table._sortHierarchy.indexOf(sortState) + 1;
             rankSpan.textContent = rank;
@@ -180,7 +178,7 @@ SCRIPT = """
             } else {
               comparison = valueA.localeCompare(valueB);
             }
-            
+
             if (comparison !== 0) {
               return comparison * (dir === 'asc' ? 1 : -1);
             }
@@ -197,14 +195,14 @@ SCRIPT = """
       function handleSortClick(table, header, direction) {
         const columnIndex = header.cellIndex;
         const sortKey = header.dataset.sortKey;
-        
+
         // Find if this column is already in hierarchy
         const colStateIndex = table._sortHierarchy.findIndex(s => s.index === columnIndex);
-        
+
         if (colStateIndex > -1) {
           // Column is active
           const currentState = table._sortHierarchy[colStateIndex];
-          
+
           if (currentState.dir === direction) {
             // Clicked the SAME direction -> Deselect (Remove)
             table._sortHierarchy.splice(colStateIndex, 1);
@@ -236,15 +234,15 @@ SCRIPT = """
 
         // Attach listeners to the ARROWS, not the header
         table.querySelectorAll('th[data-sort-key]').forEach(header => {
-          
+
           const upArrow = header.querySelector('.sort-arrow.up');
           const downArrow = header.querySelector('.sort-arrow.down');
-          
+
           upArrow.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevent bubbling
             handleSortClick(table, header, 'asc');
           });
-          
+
           downArrow.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevent bubbling
             handleSortClick(table, header, 'desc');
@@ -256,11 +254,10 @@ SCRIPT = """
 
 
 class HTMLBuilder:
-    """ Class for building HTML exports of job postings.
-    """
+    """Class for building HTML exports of job postings."""
 
     def __init__(self, data: pd.DataFrame):
-        """ Initialize HTMLBuilder.
+        """Initialize HTMLBuilder.
 
         Parameters
         ----------
@@ -272,7 +269,7 @@ class HTMLBuilder:
     def build_html(self,
                    headers: dict[str, str],
                    keys: dict[str, str]) -> str:
-        """ Build the HTML export string.
+        """Build the HTML export string.
 
         Parameters
         ----------
@@ -299,12 +296,13 @@ class HTMLBuilder:
             if self._data[val_col].dtype == bool:
                 # Boolean case
                 self._data[val_col] = self._data[val_col].apply(lambda v: "✕" if v else "")
-            elif is_datetime64_any_dtype(self._data[val_col]):
+            elif pd.api.types.is_datetime64_any_dtype(self._data[val_col]):
                 # Datetime case
-                if key_col and is_datetime64_any_dtype(self._data[key_col]):
+                if key_col and pd.api.types.is_datetime64_any_dtype(self._data[key_col]):
                     self._data[key_col] = self._data[key_col].fillna(pd.Timestamp.min).astype(int) // 10**9
                 self._data[val_col] = self._data[val_col].dt.strftime("%m/%d").fillna("")
-            elif is_string_dtype(self._data[val_col]) and self._data[val_col].str.startswith("http", na=False).any():
+            elif pd.api.types.is_string_dtype(self._data[val_col]) and \
+                    self._data[val_col].str.startswith("http", na=False).any():
                 # URL case
                 url_series = self._data[val_col]
                 label_series = self._data[key_col] if key_col else pd.Series(["link"] * len(url_series))
@@ -314,7 +312,7 @@ class HTMLBuilder:
             else:
                 # Default case
                 self._data[val_col] = self._data[val_col].fillna("")
-            
+
             # Wrap values in <td> with optional sorting attribute
             if key_col:
                 # Add data-* attribute for sorting
@@ -339,12 +337,12 @@ class HTMLBuilder:
                 html += '               <span class="sort-arrow up">🮧</span>\n'
                 html += '               <span class="sort-rank"></span>\n'
                 html += '               <span class="sort-arrow down">🮦</span>\n'
-                html += '             </div>\n'
+                html += "             </div>\n"
             else:
                 html += "          <th>\n"
 
-            html += f'                {val_hdr}\n'
-            html += '              </th>\n'
+            html += f"                {val_hdr}\n"
+            html += "              </th>\n"
 
         html += "        </tr>\n"
         html += "      </thead>\n"

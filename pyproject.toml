@@ -9,3 +9,44 @@ dependencies = [
     "python-jobspy>=1.1.82",
     "qt-material>=2.17",
 ]
+
+########################
+## Ruff Configuration ##
+########################
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "A",        # avoid overshadowing built-ins
+    "Q",        # quote consistency
+    "I",        # automatically sort and group imports
+    "N",        # naming conventions
+    "E",        # pycodestyle errors
+    "W",        # pycodestyle warnings
+    "D",        # docstring conventions
+    "F",        # pyflakes rules
+]
+ignore = [
+    "D1",       # Ignore missing docstrings
+    "D205",     # Allow multi-line docstring summary
+    "N802",     # Allow mixedCase for Qt classes
+    "N815",     # Allow mixedCase for Qt methods
+]
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["A", "Q", "I", "N", "E", "W", "D", "F"]
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+# Allow unused imports in __init__.py files.
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+ignore-var-parameters = true
+
+[tool.ruff.format]
+docstring-code-format = true

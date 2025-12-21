@@ -2,15 +2,16 @@ __all__ = ["clean_description"]
 
 
 import re
+
 from .uni2ascii import uni2ascii
 
 
 def clean_description(md: str) -> str:
-    """ Clean and standardize markdown text of job description. """
+    """Clean and standardize markdown text of job description."""
     # Convert to ASCII characters
     md = uni2ascii(md)
     md = md.encode("ascii", "ignore").decode("ascii", "ignore")
-    
+
     # Remove escape symbols
     md = md.replace("\\", "")
     # Remove newlines within paragraphs
@@ -80,7 +81,7 @@ def clean_description(md: str) -> str:
     pat = r"^\s*([A-Z][A-Z?!.,;\-\s]{3,})\s*$"
     rep = r"\n### \1\n\n"
     md = re.sub(pat, rep, md, flags=re.MULTILINE)
-    
+
     # Make header from line immediately preceding bullet points
     pat = r"^(?!\s*\* )(.+?)\s*\n(\s*\* .+?)"
     rep = r"\n### \1\n\n\2"

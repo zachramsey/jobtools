@@ -23,7 +23,7 @@ US_LOOKUP = set(["us", "usa", "united states", "united states of america"])
 
 
 def parse_location(loc: str) -> tuple:
-    """ Parse location string into (`"<city>"`, `"<state>"`, `"<city>, <state>"`) tuple. """
+    """Parse location string into (`"<city>"`, `"<state>"`, `"<city>, <state>"`) tuple."""
     if not isinstance(loc, str):
         return "", "", ""
     parts = [p.strip() for p in loc.split(",")]

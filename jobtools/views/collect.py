@@ -1,10 +1,11 @@
-from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout,
-                               QRadioButton, QLineEdit, QSpinBox, QPushButton)
-from PySide6.QtCore import QModelIndex, Qt, Signal, Slot, QObject, QThread
-from threading import Event
 import traceback
+from threading import Event
+
+from PySide6.QtCore import QModelIndex, QObject, Qt, QThread, Signal, Slot
+from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QRadioButton, QSpinBox, QVBoxLayout, QWidget
+
 from ..models import ConfigModel, JobsDataModel
-from .widgets import QHeader, QPlainTextListEdit, QChipSelect
+from .widgets import QChipSelect, QHeader, QPlainTextListEdit
 
 DS_TT = """Select the source of job data to load.
 
@@ -38,7 +39,7 @@ Example: "software engineer" AND (python OR java) NOT intern"""
 
 
 class CollectionWorker(QObject):
-    """ Worker for running job data collection in a separate thread. """
+    """Worker for running job data collection in a separate thread."""
 
     finished = Signal(str)
     error = Signal(str)
@@ -51,7 +52,7 @@ class CollectionWorker(QObject):
 
     @Slot()
     def run(self):
-        """ Run the job data collection process.
+        """Run the job data collection process.
 
         Yields
         ------
@@ -100,7 +101,7 @@ class CollectionWorker(QObject):
 
 
 class DataSourceSelector(QWidget):
-    """ Widget for selecting data source. """
+    """Widget for selecting data source."""
 
     sourceChanged = Signal(str)
     """ Signal emitted when the data source selection changes. """
@@ -140,11 +141,11 @@ class DataSourceSelector(QWidget):
 
     @Slot()
     def _on_change(self):
-        """ Emit current source when selection changes. """
+        """Emit current source when selection changes."""
         self.sourceChanged.emit(self.get_source())
 
     def get_source(self) -> str:
-        """ Data source selection. """
+        """Get data source selection."""
         if self.radio_none.isChecked():
             return ""
         elif self.radio_archive.isChecked():
@@ -157,7 +158,7 @@ class DataSourceSelector(QWidget):
             return ""
 
     def set_source(self, source: str):
-        """ Set data source selection. """
+        """Set data source selection."""
         # Prevent signal emission during update
         self.blockSignals(True)
         if source == "":
@@ -258,34 +259,34 @@ class CollectPage(QWidget):
 
         # Connect view to config model
         self.ds_selector.sourceChanged.connect(
-            lambda t: self._update_config("data_source", t))
+            lambda text: self._update_config("data_source", text))
         self.s_selector.selectionChanged.connect(
-            lambda L: self._update_config("sites_selected", L))
+            lambda sel: self._update_config("sites_selected", sel))
         self.s_selector.availableChanged.connect(
-            lambda L: self._update_config("sites_available", L))
+            lambda avl: self._update_config("sites_available", avl))
         self.l_editor.selectionChanged.connect(
-            lambda L: self._update_config("locations_selected", L))
+            lambda sel: self._update_config("locations_selected", sel))
         self.l_editor.availableChanged.connect(
-            lambda L: self._update_config("locations_available", L))
+            lambda avl: self._update_config("locations_available", avl))
         self.q_editor.itemsChanged.connect(
-            lambda L: self._update_config("queries", L))
+            lambda items: self._update_config("queries", items))
         self.h_editor.valueChanged.connect(
-            lambda n: self._update_config("hours_old", n))
-        
+            lambda vals: self._update_config("hours_old", vals))
+
         # Connect config model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
-        """ Override layout to remove type-checking errors. """
+        """Override layout to remove type-checking errors."""
         return super().layout() # type: ignore
 
     def _update_config(self, key: str, value):
-        """ Update model data from view changes. """
+        """Update model data from view changes."""
         if key in self._idcs:
             self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
-        """ Get value from model for a specific key. """
+        """Get value from model for a specific key."""
         idx = self._idcs.get(key)
         if idx is not None and (not top_left.isValid() or top_left == idx):
             val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
@@ -296,7 +297,7 @@ class CollectPage(QWidget):
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
-        """ Update view when model data changes. """
+        """Update view when model data changes."""
         # Data source
         val = self.__get_value("data_source", top_left)
         if val is not None and val != self.ds_selector.get_source():
@@ -332,7 +333,7 @@ class CollectPage(QWidget):
 
     @Slot()
     def _on_run_clicked(self):
-        """ Handle run button click. """
+        """Handle run button click."""
         if self.run_btn.text() == "Collect Jobs":
             # Update UI
             self.run_btn.setText("Cancel")
@@ -365,7 +366,7 @@ class CollectPage(QWidget):
 
     @Slot(str)
     def _on_collection_finished(self, csv_path: str):
-        """ Handle completion of job data collection. """
+        """Handle completion of job data collection."""
         self.run_btn.setText("Collect Jobs")
         self.run_btn.setProperty("class", "")
         self.run_btn.style().unpolish(self.run_btn)
@@ -375,7 +376,7 @@ class CollectPage(QWidget):
 
     @Slot(str)
     def _on_collection_error(self, error_msg: str):
-        """ Handle errors during job data collection. """
+        """Handle errors during job data collection."""
         self.run_btn.setEnabled(True)
         self.run_btn.setText("Collect Jobs")
         raise RuntimeError(f"Job data collection failed: {error_msg}")

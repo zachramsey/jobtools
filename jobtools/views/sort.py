@@ -1,9 +1,9 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QRadioButton, QSpinBox
-from PySide6.QtCore import QModelIndex, Qt, Slot, Signal
-from .widgets import QHeader, QChipSelect
+from PySide6.QtCore import QModelIndex, Qt, Signal, Slot
+from PySide6.QtWidgets import QHBoxLayout, QRadioButton, QSpinBox, QVBoxLayout, QWidget
+
 from ..models import ConfigModel, JobsDataModel
 from ..utils.location_parser import NAME_TO_ABBR
-
+from .widgets import QChipSelect, QHeader
 
 DV_TT = """Adjust sorting values based on degree levels.
 
@@ -33,7 +33,7 @@ sorting values to disfavor those listings."""
 
 
 class DegreeValueSelector(QWidget):
-    """ Widget for selecting degree values. """
+    """Widget for selecting degree values."""
 
     valuesChanged = Signal(int, int, int)
     """ Signal emitted when the degree values change. """
@@ -86,31 +86,31 @@ class DegreeValueSelector(QWidget):
 
     @Slot()
     def _on_change(self):
-        """ Emit current degree values when changed. """
+        """Emit current degree values when changed."""
         self.valuesChanged.emit(*self.get_values())
 
     def setup_spin_box(self, label: str, level: int) -> QSpinBox:
-        """ Create and configure a spin box for degree values. """
+        """Create and configure a spin box for degree values."""
         spin_box = QSpinBox(prefix=f"{label}: ", minimum=-10, maximum=10, value=0)
         spin_box.valueChanged.connect(lambda val: self.__set_value(level, val))
         spin_box.setFixedWidth(100)
         return spin_box
-    
+
     def setup_radio_button(self, label: str, values: tuple[int, int, int]) -> QRadioButton:
-        """ Create and configure a radio button for preset degree values. """
+        """Create and configure a radio button for preset degree values."""
         radio_btn = QRadioButton(label)
         if values != (None, None, None):
             radio_btn.clicked.connect(lambda: self.__set_values(*values))
         return radio_btn
 
     def get_values(self) -> tuple[int, int, int]:
-        """ Access current degree values. """
+        """Access current degree values."""
         return (self.spin_ba.value(),
                 self.spin_ma.value(),
                 self.spin_phd.value())
 
     def set_values(self, ba: int, ma: int, phd: int):
-        """ Set degree values and update radio buttons. """
+        """Set degree values and update radio buttons."""
         values = (ba, ma, phd)
         if values == self.no_values:
             self.radio_none.setChecked(True)
@@ -128,7 +128,7 @@ class DegreeValueSelector(QWidget):
 
     @Slot()
     def __set_value(self, level: int, value: int):
-        """ Set individual degree value and update radio buttons. """
+        """Set individual degree value and update radio buttons."""
         ba, ma, phd = self.get_values()
         if level == 0:
             ba = value
@@ -137,18 +137,18 @@ class DegreeValueSelector(QWidget):
         elif level == 2:
             phd = value
         self.set_values(ba, ma, phd)
-    
+
     @Slot()
     def __set_values(self, ba: int|None, ma: int|None, phd: int|None):
-        """ Set all degree values and update radio buttons. """
-        if ba is None:    
+        """Set all degree values and update radio buttons."""
+        if ba is None:
             ba = self.spin_ba.value()
-        if ma is None:    
+        if ma is None:
             ma = self.spin_ma.value()
-        if phd is None:    
+        if phd is None:
             phd = self.spin_phd.value()
         self.set_values(ba, ma, phd)
-    
+
 
 class SortPage(QWidget):
     def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
@@ -202,7 +202,7 @@ class SortPage(QWidget):
 
         # Push content to top
         self.layout().addStretch()
-        
+
         # Register page with config model
         root_index = self._config_model.register_page("sort", self.defaults)
 
@@ -217,30 +217,30 @@ class SortPage(QWidget):
         self.dv_selector.valuesChanged.connect(
             lambda ba, ma, phd: self._update_config("degree_values", (ba, ma, phd)))
         self.lo_selector.selectionChanged.connect(
-            lambda L: self._update_config("location_order_selected", L))
+            lambda sel: self._update_config("location_order_selected", sel))
         self.lo_selector.availableChanged.connect(
-            lambda L: self._update_config("location_order_available", L))
+            lambda avl: self._update_config("location_order_available", avl))
         for value, selector in self.te_selectors.items():
             selector.selectionChanged.connect(
-                lambda L, v=value: self._update_config(f"terms_selected_{str(v)}", L))
+                lambda sel, v=value: self._update_config(f"terms_selected_{str(v)}", sel))
             selector.availableChanged.connect(
-                lambda L, v=value: self._update_config(f"terms_available_{str(v)}", L))
-        
+                lambda avl, v=value: self._update_config(f"terms_available_{str(v)}", avl))
+
         # Connect config model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
-        """ Override layout to remove type-checking errors. """
+        """Override layout to remove type-checking errors."""
         return super().layout() # type: ignore
 
     def _update_config(self, key: str, value):
-        """ Update config model from view changes. """
+        """Update config model from view changes."""
         idx = self._idcs.get(key)
         if idx is not None:
             self._config_model.setData(idx, value, Qt.ItemDataRole.EditRole)
 
     def __get_value(self, key: str, top_left: QModelIndex):
-        """ Get value from config model for a specific key. """
+        """Get value from config model for a specific key."""
         idx = self._idcs.get(key)
         if idx is not None and (not top_left.isValid() or top_left == idx):
             val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
@@ -251,7 +251,7 @@ class SortPage(QWidget):
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
-        """ Update view when config model changes. """
+        """Update view when config model changes."""
         # Degree values
         val = self.__get_value("degree_values", top_left)
         if val is not None and val != self.dv_selector.get_values():

@@ -25,7 +25,7 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-"""
+"""     # noqa: D400
 
 # -*- coding: utf-8 -*-
 #
@@ -71,7 +71,6 @@ def uni2ascii(line):
     Replace unicode characters that look similar to ASCII with their ASCII
     equivalent.
     """
-
     if Global.translits is None:
         Global.translits = get_translits()
         Global.unicodere = re.compile(
@@ -94,7 +93,7 @@ def get_translits():
     """
     Convenience function to make it easy to add translits in place.
     Returns a dict of unicode=>ascii.
-    """
+    """     # noqa: D401
     translitstr = """
 ¡       i
 ²       2

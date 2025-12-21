@@ -1,23 +1,33 @@
 from pathlib import Path
-from PySide6.QtCore import Qt, Slot, QUrl, QSize, QPoint
-from PySide6.QtGui import QDesktopServices, QCursor
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
-                               QDialog, QTableView, QLabel, QTextEdit,
-                               QComboBox, QPushButton, QHeaderView)
+
+from PySide6.QtCore import QPoint, QSize, Qt, QUrl, Slot
+from PySide6.QtGui import QCursor, QDesktopServices
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QTableView,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
 from ..models import ConfigModel, JobsDataModel
-from ..utils import get_data_sources, ThemeColor, blend_colors, get_icon, clean_description
+from ..utils import ThemeColor, blend_colors, clean_description, get_data_sources, get_icon
 from .widgets import QWebImageLabel
 
-
-UNUSED_COLUMNS = ['id', 'job_url_direct', 'salary_source', 'interval',
-                  'min_amount', 'max_amount', 'currency', 'job_level',
-                  'job_function', 'listing_type', 'emails', 'description',
-                  'company_industry', 'company_url', 'company_logo',
-                  'company_url_direct', 'company_addresses',
-                  'company_num_employees', 'company_revenue',
-                  'company_description', 'skills', 'experience_range',
-                  'company_rating', 'company_reviews_count', 'vacancy_count',
-                  'work_from_home_type', 'location', 'city']
+UNUSED_COLUMNS = ["id", "job_url_direct", "salary_source", "interval",
+                  "min_amount", "max_amount", "currency", "job_level",
+                  "job_function", "listing_type", "emails", "description",
+                  "company_industry", "company_url", "company_logo",
+                  "company_url_direct", "company_addresses",
+                  "company_num_employees", "company_revenue",
+                  "company_description", "skills", "experience_range",
+                  "company_rating", "company_reviews_count", "vacancy_count",
+                  "work_from_home_type", "location", "city"]
 
 
 class HoverTableView(QTableView):
@@ -38,8 +48,8 @@ class HoverTableView(QTableView):
 
 
 class JobDetails(QDialog):
-    """ Popup dialog to show detailed job information. """
-    
+    """Popup dialog to show detailed job information."""
+
     def __init__(self, job_data: dict, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Job Details")
@@ -69,8 +79,8 @@ class JobDetails(QDialog):
         title_label.setWordWrap(True)
         self.layout().addWidget(title_label)
         # Job Function
-        if function_str := job_data.get('job_function'):
-            if function_str != 'other':
+        if function_str := job_data.get("job_function"):
+            if function_str != "other":
                 function_label = QLabel(f"<i>{function_str}</i>")
                 self.layout().addWidget(function_label)
         self.layout().addSpacing(10)
@@ -88,13 +98,13 @@ class JobDetails(QDialog):
         self.layout().addLayout(location_info)
         self.layout().addSpacing(10)
         # Job Type
-        if job_type := job_data.get('job_type'):
+        if job_type := job_data.get("job_type"):
             type_label = QLabel(f"{job_type.title()}")
             self.layout().addWidget(type_label)
             self.layout().addSpacing(10)
         # Job Level
-        if job_level := job_data.get('job_level'):
-            if job_level != 'not applicable':
+        if job_level := job_data.get("job_level"):
+            if job_level != "not applicable":
                 level_label = QLabel(f"{job_level.title()}")
                 self.layout().addWidget(level_label)
                 self.layout().addSpacing(10)
@@ -117,7 +127,7 @@ class JobDetails(QDialog):
 
     def layout(self) -> QVBoxLayout:
         return super().layout()  # type: ignore
-    
+
     def showEvent(self, event):
         if self.parentWidget() is not None:
             # Set dialog size relative to parent
@@ -138,7 +148,7 @@ class JobDetails(QDialog):
 
 
 class CompanyDetails(QDialog):
-    """ Popup dialog to show detailed company information. """
+    """Popup dialog to show detailed company information."""
 
     def __init__(self, company_data: dict, parent=None):
         super().__init__(parent)
@@ -201,7 +211,7 @@ class CompanyDetails(QDialog):
 
     def layout(self) -> QVBoxLayout:
         return super().layout()  # type: ignore
-    
+
     def showEvent(self, event):
         if self.parentWidget() is not None:
             # Set dialog size
@@ -221,7 +231,7 @@ class CompanyDetails(QDialog):
 
 
 class DataPage(QWidget):
-    """ Page for displaying collected job data. """
+    """Page for displaying collected job data."""
 
     def __init__(self,
                  config_model: ConfigModel,
@@ -235,7 +245,7 @@ class DataPage(QWidget):
         self._setup_data_model(self._data_model._foobar_path)
         self._data_model.set_visible_columns([
             "is_favorite", "date_posted", "state", "company", "title",
-            "has_ba", "has_ma", "has_phd", "keywords", "site", 
+            "has_ba", "has_ma", "has_phd", "keywords", "site",
         ])
         self._data_model.set_column_labels({
             "is_favorite": "",
@@ -276,7 +286,7 @@ class DataPage(QWidget):
         data_selector_layout.addWidget(self.data_refresh)
         data_selector_layout.addStretch()
         self.layout().addLayout(data_selector_layout)
-        
+
         # HACK: This is a stupid workaround to update the data model after collection.
         #       Seems like the data should update automatically, since it is loaded
         #       from the same JobsDataModel instance. Will investigate later.
@@ -296,7 +306,8 @@ class DataPage(QWidget):
         self.table_view.setProperty("class", "data-table")
         bg_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY, 0.7)
         alt_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY_LIGHT, 0.7)
-        self.table_view.setStyleSheet(f"QTableView {{ background-color: {bg_color}; alternate-background-color: {alt_color}; }}")
+        self.table_view.setStyleSheet(f"QTableView {{ background-color: {bg_color}; \
+                                                      alternate-background-color: {alt_color}; }}")
         self.table_view.setShowGrid(False)
         self.table_view.setSelectionMode(QTableView.SelectionMode.NoSelection)
         self.table_view.setWordWrap(True)
@@ -304,11 +315,11 @@ class DataPage(QWidget):
         self.layout().addWidget(self.table_view)
 
     def layout(self) -> QVBoxLayout:
-        """ Get layout as QVBoxLayout. """
+        """Get layout as QVBoxLayout."""
         return super().layout()  # type: ignore
-    
+
     def _setup_data_model(self, data_path: Path):
-        """ Setup the data model from the given data path. """
+        """Set up the data model from the given data path."""
         self._data_model.load_data(data_path)
         cfg = self._config_model.get_config_dict()
         # Apply current sorting configuration
@@ -341,14 +352,14 @@ class DataPage(QWidget):
 
     @Slot(int)
     def _on_load_data_source(self):
-        """ Load selected data source into the data model. """
+        """Load selected data source into the data model."""
         data_path = self.data_selector.currentData()
         if data_path.exists():
             self._setup_data_model(data_path)
 
     @Slot()
     def _on_refresh_data_sources(self):
-        """ Refresh the list of available data sources. """
+        """Refresh the list of available data sources."""
         current_text = self.data_selector.currentText()
         self.data_selector.clear()
         for name, path in self._special_sources.items():
@@ -362,7 +373,7 @@ class DataPage(QWidget):
 
     @Slot()
     def _on_clickable(self, index):
-        """ Handle clicks on clickable cells """
+        """Handle clicks on clickable cells."""
         col = self._data_model.columns[index.column()]
         if col == "is_favorite":
             self._data_model.toggle_favorite(index)
@@ -378,4 +389,3 @@ class DataPage(QWidget):
             url = self._data_model.get_index_url(index)
             if url:
                 QDesktopServices.openUrl(QUrl(url))
-            

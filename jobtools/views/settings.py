@@ -1,9 +1,9 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QComboBox
-from PySide6.QtCore import Qt, QModelIndex, Slot, QSize
-from .widgets import QHeader
+from PySide6.QtCore import QModelIndex, QSize, Qt, Slot
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout, QWidget
+
 from ..models import ConfigModel, JobsDataModel
 from ..utils import get_config_dir, get_icon
-
+from .widgets import QHeader
 
 LC_TT = """Load a saved configuration from file.
 Select a configuration from the dropdown and click 'Load' to apply it to the application."""
@@ -22,8 +22,6 @@ requests and help avoid IP blocking."""
 
 
 class SettingsPage(QWidget):
-    """ """
-
     def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
         self._config_model = config_model
@@ -100,21 +98,21 @@ class SettingsPage(QWidget):
         # Connect view to config model
         self.p_editor.textChanged.connect(
             lambda t: self._update_config("proxy", t))
-        
+
         # Connect config model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
-        """ Override layout to remove type-checking errors. """
+        """Override layout to remove type-checking errors."""
         return super().layout() # type: ignore
-    
+
     def _update_config(self, key: str, value):
-        """ Update model data from view changes. """
+        """Update model data from view changes."""
         if key in self._idcs:
             self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
-    
+
     def __get_value(self, key: str, top_left: QModelIndex):
-        """ Get value from model for a specific key. """
+        """Get value from model for a specific key."""
         idx = self._idcs.get(key)
         if idx is not None and (not top_left.isValid() or top_left == idx):
             val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
@@ -125,7 +123,7 @@ class SettingsPage(QWidget):
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
-        """ Update view when model data changes. """
+        """Update view when model data changes."""
         # Proxy
         val = self.__get_value("proxy", top_left)
         if val is not None and val != self.p_editor.text().strip():
@@ -133,7 +131,7 @@ class SettingsPage(QWidget):
 
     @Slot(str)
     def _on_load_config(self):
-        """ Load configuration from file. """
+        """Load configuration from file."""
         config_name = self.config_select.currentText().strip()
         if not config_name:
             return
@@ -146,7 +144,7 @@ class SettingsPage(QWidget):
 
     @Slot()
     def _on_refresh_configs(self):
-        """ Refresh the list of saved configurations. """
+        """Refresh the list of saved configurations."""
         temp = self.config_select.currentText()
         self.config_select.clear()
         self.config_select.addItems([""]+self._config_model.get_saved_config_names())
@@ -154,7 +152,7 @@ class SettingsPage(QWidget):
 
     @Slot()
     def _on_save_config(self):
-        """ Save current configuration to file. """
+        """Save current configuration to file."""
         config_name = self.config_edit.text().strip()
         if not config_name:
             return

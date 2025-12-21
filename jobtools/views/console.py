@@ -1,30 +1,32 @@
 import logging
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTextEdit
+
 from PySide6.QtCore import QObject, Signal, Slot
+from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
+
 from ..utils import JDLogger
 
 
 class QtLogHandler(QObject, logging.Handler):
-    """ Custom logging handler that emits log messages as Qt signals. """
+    """Custom logging handler that emits log messages as Qt signals."""
 
     log_signal = Signal(str)
     """ Signal emitted with log message string. """
 
     def __init__(self, parent: QObject | None = None):
-        """ Initialize the QtLogger with optional parent. """
+        """Initialize the QtLogger with optional parent."""
         super().__init__(parent)
         logging.Handler.__init__(self, level=logging.INFO)
-        
+
     def emit(self, record):
-        """ Send the formatted log record as a Qt signal. """
+        """Send the formatted log record as a Qt signal."""
         self.log_signal.emit(self.format(record))
 
 
 class ConsolePage(QWidget):
-    """ Bottom log panel for displaying console output. """
+    """Bottom log panel for displaying console output."""
 
     def __init__(self):
-        """ Setup the log panel UI components. """
+        """Initialize the ConsolePage."""
         super().__init__()
         self.setProperty("class", "log-panel")
 
@@ -50,7 +52,7 @@ class ConsolePage(QWidget):
 
     @Slot()
     def _on_console_output(self, text):
-        """ Handle text coming from logger. """
+        """Handle text coming from logger."""
         if not text.strip():
             return
         # Append text to log output

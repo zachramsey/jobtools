@@ -1,17 +1,26 @@
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                               QHBoxLayout, QStackedWidget, QPushButton,
-                               QFrame, QButtonGroup, QScrollArea)
-from PySide6.QtCore import Qt, QSize, Slot
-from PySide6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase
-from qt_material import apply_stylesheet    # type: ignore
+from PySide6.QtCore import QSize, Qt, Slot
+from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon
+from PySide6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QMainWindow,
+    QPushButton,
+    QScrollArea,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
+from qt_material import apply_stylesheet  # type: ignore
+
 from .models import ConfigModel, JobsDataModel
-from .views import (CollectPage, FilterPage, SortPage,
-                    DataPage, ConsolePage, SettingsPage)
-from .utils import get_resource_dir, get_icon, get_sys_theme
+from .utils import get_icon, get_resource_dir, get_sys_theme
+from .views import CollectPage, ConsolePage, DataPage, FilterPage, SettingsPage, SortPage
 
 
 class JobToolsApp(QMainWindow):
-    """ Main application window for JobTools. """
+    """Main application window for JobTools."""
 
     def __init__(self):
         super().__init__()
@@ -61,8 +70,8 @@ class JobToolsApp(QMainWindow):
         app = QApplication.instance()
         theme_path = str(get_resource_dir() / f"theme_{get_sys_theme()}.xml")
         qss_path = str(get_resource_dir() / "custom.qss")
-        light_extra = {'danger': '#DB3E03', 'warning': '#977100', 'success': '#008679'}
-        dark_extra = {'danger': '#FF8B69', 'warning': '#D8A300', 'success': '#48BDAE'}
+        light_extra = {"danger": "#DB3E03", "warning": "#977100", "success": "#008679"}
+        dark_extra = {"danger": "#FF8B69", "warning": "#D8A300", "success": "#48BDAE"}
         extra = dark_extra if get_sys_theme() == "dark" else light_extra
         apply_stylesheet(app, theme=theme_path, css_file=qss_path, extra=extra)
 
@@ -105,7 +114,7 @@ class JobToolsApp(QMainWindow):
                  icon_name: str,
                  icon_size: int = 32,
                  align_bottom: bool = False):
-        """ Add a new page to the application with navigation button.
+        """Add a new page to the application with navigation button.
 
         Parameters
         ----------
@@ -145,10 +154,10 @@ class JobToolsApp(QMainWindow):
 
 
 class NavPanel(QFrame):
-    """ Sidebar navigation panel for switching between pages. """
-    
+    """Sidebar navigation panel for switching between pages."""
+
     def __init__(self, pages: QStackedWidget):
-        """ Setup the sidebar navigation panel. """
+        """Set up the sidebar navigation panel."""
         super().__init__()
         self._pages = pages
 
@@ -178,10 +187,10 @@ class NavPanel(QFrame):
         self.btn_group = QButtonGroup(self)
         self.btn_group.setExclusive(True)
         self.btn_group.buttonClicked.connect(self._on_nav_button_clicked)
-    
+
     @Slot()
     def _on_nav_button_clicked(self, btn):
-        """ Handle navigation button clicks. """
+        """Handle navigation button clicks."""
         index = btn.property("page_index")
         if index is not None:
             self._pages.setCurrentIndex(index)

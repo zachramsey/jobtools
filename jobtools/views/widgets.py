@@ -1,5 +1,6 @@
 __all__ = [
     "QHeader",
+    "QWebImageLabel",
     "QAdaptivePlainTextEdit",
     "QPlainTextListEdit",
     "QFlowLayout",
@@ -8,23 +9,36 @@ __all__ = [
 ]
 
 from enum import Enum
-from PySide6.QtCore import Qt, QEvent, Slot, QPoint, QRect, QSize, Signal, QUrl
+
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, Qt, QUrl, Signal, Slot
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
-    QWidget, QWidgetItem, QSizePolicy, QVBoxLayout, QHBoxLayout,
-    QPlainTextEdit, QPushButton, QLayout, QFrame, QLineEdit,
-    QStackedLayout, QMenu, QCheckBox, QLabel
+    QCheckBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QLineEdit,
+    QMenu,
+    QPlainTextEdit,
+    QPushButton,
+    QSizePolicy,
+    QStackedLayout,
+    QVBoxLayout,
+    QWidget,
+    QWidgetItem,
 )
+
 from ..utils import get_icon
 from ..utils.logger import JDLogger
 
 
 class QHeader(QWidget):
-    """ Header widget with title and optional help tooltip. """
+    """Header widget with title and optional help tooltip."""
 
     def __init__(self, title: str, header_level: int = 2, tooltip: str = ""):
-        """ Initialize the header widget.
+        """Initialize the header widget.
 
         Parameters
         ----------
@@ -39,23 +53,23 @@ class QHeader(QWidget):
         self.setLayout(QHBoxLayout(self))
         self.layout().addWidget(QLabel(f"<h{header_level}>{title}</h{header_level}>"))  # type: ignore
         if tooltip:
-            help = QPushButton()
-            help.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
-            help.setIcon(get_icon("help", color="primaryLightColor"))
-            help.setIconSize(QSize(16, 16))
-            help.setCursor(Qt.CursorShape.PointingHandCursor)
-            help.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            help.setProperty("class", "help-button")
-            help.setToolTip(tooltip)
-            self.layout().addWidget(help)   # type: ignore
+            help_btn = QPushButton()
+            help_btn.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
+            help_btn.setIcon(get_icon("help", color="primaryLightColor"))
+            help_btn.setIconSize(QSize(16, 16))
+            help_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            help_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            help_btn.setProperty("class", "help-button")
+            help_btn.setToolTip(tooltip)
+            self.layout().addWidget(help_btn)   # type: ignore
         self.layout().addStretch()          # type: ignore
 
 
 class QWebImageLabel(QLabel):
-    """ QLabel that loads and displays an image from a web URL. """
+    """QLabel that loads and displays an image from a web URL."""
 
     def __init__(self, url: str):
-        """ Initialize the web image label.
+        """Initialize the web image label.
 
         Parameters
         ----------
@@ -65,14 +79,14 @@ class QWebImageLabel(QLabel):
         super().__init__()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setText("Loading...")
-        
+
         self._manager = QNetworkAccessManager(self)
         self._manager.finished.connect(self._on_finished)
         self._manager.get(QNetworkRequest(QUrl(url)))
-        
+
     @Slot(QNetworkReply)
     def _on_finished(self, reply: QNetworkReply):
-        """ Handle the finished network reply. """
+        """Handle the finished network reply."""
         if reply.error() != QNetworkReply.NetworkError.NoError:
             JDLogger().warning(f"Failed to load image from URL: {reply.errorString()}")
             self.setText("Failed to load image.")
@@ -84,11 +98,11 @@ class QWebImageLabel(QLabel):
 
 
 class QAdaptivePlainTextEdit(QPlainTextEdit):
-    """ QPlainTextEdit that adapts its height to content. """
+    """QPlainTextEdit that adapts its height to content."""
 
     def __init__(self, max_lines : int = 5):
-        """ Initialize the adaptive plain text editor.
-        
+        """Initialize the adaptive plain text editor.
+
         Parameters
         ----------
         max_lines : int
@@ -104,7 +118,7 @@ class QAdaptivePlainTextEdit(QPlainTextEdit):
 
     @Slot()
     def _update_height(self, size):
-        """ Update height based on content size, up to max lines. """
+        """Update height based on content size, up to max lines."""
         doc_height = self.document().size().height() * self._font_height
         height = max(self._min_height, doc_height + self._vert_margins)
         if height > self._max_height:
@@ -113,16 +127,16 @@ class QAdaptivePlainTextEdit(QPlainTextEdit):
         else:
             self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFixedHeight(int(height))
-    
+
 
 class QPlainTextListEdit(QWidget):
-    """ Widget for editing a list of plain text items. """
+    """Widget for editing a list of plain text items."""
 
     itemsChanged = Signal(list)
     """ Signal emitted when the list of items changes. """
 
     def __init__(self, placeholder_text: str = "Add new item..."):
-        """ Initialize the plain text list editor.
+        """Initialize the plain text list editor.
 
         Parameters
         ----------
@@ -144,7 +158,7 @@ class QPlainTextListEdit(QWidget):
         self._add_editor_row()
 
     def _add_editor_row(self):
-        """ Add a new editor row to the layout. """
+        """Add a new editor row to the layout."""
         # Create row container
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
@@ -178,7 +192,7 @@ class QPlainTextListEdit(QWidget):
         delete_btn.clicked.connect(lambda _, r=row: self._on_delete(r))
 
     def eventFilter(self, watched, event):
-        """ Event filter to handle FocusIn events on editors.
+        """Event filter to handle FocusIn events on editors.
 
         Only activate editors when focus change is due to an actual user interaction
         (mouse, tab, backtab, or keyboard shortcut), not programmatic focus changes.
@@ -206,7 +220,7 @@ class QPlainTextListEdit(QWidget):
 
     @Slot()
     def _on_delete(self, row):
-        """ Handle delete button click for a row. """
+        """Handle delete button click for a row."""
         if row not in self.rows:
             return
         # Replace delete button with confirm/cancel buttons
@@ -224,7 +238,7 @@ class QPlainTextListEdit(QWidget):
 
     @Slot()
     def _on_confirm_delete(self, row):
-        """ Handle confirm delete button click for a row. """
+        """Handle confirm delete button click for a row."""
         if row not in self.rows:
             return
         try:
@@ -255,37 +269,37 @@ class QPlainTextListEdit(QWidget):
 
     @Slot()
     def _on_cancel_delete(self, row):
-        """ Handle cancel delete button click for a row. """
+        """Handle cancel delete button click for a row."""
         if row not in self.rows:
             return
         self._restore_delete_button(row)
 
     def _restore_delete_button(self, row):
-        """ Restore the delete button in the row's button layout. """
+        """Restore the delete button in the row's button layout."""
         self._clear_layout(row["btn_layout"])
         row["btn_layout"].addWidget(row["delete_btn"])
         row["delete_btn"].setVisible(not row["editor"].isReadOnly())
 
     @staticmethod
     def _clear_layout(layout):
-        """ Clear all widgets from a layout. """
+        """Clear all widgets from a layout."""
         while layout.count():
             item = layout.takeAt(0)
             w = item.widget()
             if w is not None:
                 w.setParent(None)
-                
+
     def get_items(self) -> list[str]:
-        """ Get the list of items from all non-empty editors. """
+        """Get the list of items from all non-empty editors."""
         items = []
         for row in self.rows:
             text = row["editor"].toPlainText().strip()
             if text and text != self._placeholder_text:
                 items.append(text)
         return items
-    
+
     def set_items(self, items: list[str]):
-        """ Set the list of items, replacing existing editors.
+        """Set the list of items, replacing existing editors.
 
         Parameters
         ----------
@@ -313,7 +327,7 @@ class QPlainTextListEdit(QWidget):
         if not self.rows or not self.rows[-1]["editor"].isReadOnly():
             # Ensure trailing inactive editor
             self._add_editor_row()
-    
+
 
 class QFlowLayout(QLayout):
     def __init__(self, parent=None, margin=0, h_spacing=10, v_spacing=10):
@@ -381,7 +395,7 @@ class QFlowLayout(QLayout):
                 QSizePolicy.ControlType.PushButton,
                 QSizePolicy.ControlType.PushButton,
                 Qt.Orientation.Horizontal)
-            
+
             next_x = x + item.sizeHint().width() + space_x
             if next_x - space_x > rect.right() and line_height > 0:
                 x = rect.x()
@@ -399,12 +413,12 @@ class QFlowLayout(QLayout):
 
 
 class ChipMode(Enum):
-    STANDARD = 0 
+    STANDARD = 0
     CREATOR = 1
 
 
 class QChip(QWidget):
-    """ A selectable and optionally modifiable chip widget. """
+    """A selectable and optionally modifiable chip widget."""
 
     clicked = Signal()
     """ Signal emitted when the chip is clicked. """
@@ -418,7 +432,7 @@ class QChip(QWidget):
                  mode: ChipMode = ChipMode.STANDARD,
                  is_selected: bool = False,
                  is_custom: bool = False):
-        """ Initialize the custom chip.
+        """Initialize the custom chip.
 
         Parameters
         ----------
@@ -469,16 +483,16 @@ class QChip(QWidget):
 
     @property
     def text(self) -> str:
-        """ Text of the chip. """
+        """Text of the chip."""
         return self.btn.text()
-    
+
     @text.setter
     def text(self, text: str):
         self.btn.setText(text)
 
     @property
     def is_custom(self) -> bool:
-        """ Whether the chip is user-editable/deletable. """
+        """Whether the chip is user-editable/deletable."""
         return self._is_custom
 
     def set_is_custom(self, value: bool):
@@ -540,11 +554,12 @@ class QChip(QWidget):
             if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
                 self.cancel_edit()
                 return True
-        return super().eventFilter(obj, event)        
+        return super().eventFilter(obj, event)
 
     def sizeHint(self) -> QSize:
         """Return a size hint based on the current visible widget (button/editor).
-        This ensures the chip width follows the content width."""
+        This ensures the chip width follows the content width.
+        """
         current_widget = self.stack.currentWidget()
         if current_widget is None:
             current_widget = self.btn
@@ -555,7 +570,7 @@ class QChip(QWidget):
 
 
 class QChipSelect(QWidget):
-    """ Widget for selecting options using chips. """
+    """Widget for selecting options using chips."""
 
     selectionChanged = Signal(list)
     availableChanged = Signal(list)
@@ -564,7 +579,7 @@ class QChipSelect(QWidget):
     def __init__(self,
                  base_items: list[str]=[],
                  enable_creator: bool = True):
-        """ Initialize the chip selection widget.
+        """Initialize the chip selection widget.
 
         Parameters
         ----------
@@ -626,7 +641,7 @@ class QChipSelect(QWidget):
                                selected=True, is_custom=True)
         # Emit selection changed signal
         self.selectionChanged.emit(self.get_selected())
-        
+
     @Slot()
     def _on_move_chip(self, chip: QChip):
         current_layout = chip.parentWidget().layout()   # type: ignore
@@ -655,7 +670,7 @@ class QChipSelect(QWidget):
                 self.available_layout.insertWidget(insert_idx, chip)
             else:
                 self.available_layout.addWidget(chip)
-                    
+
         # Emit signals
         self.selectionChanged.emit(self.__get_items(self.selected_layout))
         self.availableChanged.emit(self.__get_items(self.available_layout))
@@ -682,13 +697,13 @@ class QChipSelect(QWidget):
         return items
 
     def get_selected(self) -> list[str]:
-        """ List of selected items' text. """
+        """List of selected items' text."""
         return self.__get_items(self.selected_layout)
-    
+
     def get_available(self) -> list[str]:
-        """ List of available items' text. """
+        """List of available items' text."""
         return self.__get_items(self.available_layout)
-    
+
     def __set_items(self,
                     set_layout: QFlowLayout,
                     other_layout: QFlowLayout,
@@ -722,9 +737,9 @@ class QChipSelect(QWidget):
             item = set_layout.takeAt(len(items))
             if item.widget():
                 item.widget().deleteLater()
-    
+
     def set_selected(self, items: list[str]):
-        """ Overwrite selected items with the given list,
+        """Overwrite selected items with the given list,
         removing items from available as needed.
 
         Parameters
@@ -733,9 +748,9 @@ class QChipSelect(QWidget):
             List of items to set as selected.
         """
         self.__set_items(self.selected_layout, self.available_layout, items)
-    
+
     def set_available(self, items: list[str]):
-        """ Overwrite available items with the given list,
+        """Overwrite available items with the given list,
         removing items from selected as needed.
 
         Parameters
@@ -753,13 +768,13 @@ class QChipSelect(QWidget):
 
 
 class QCheckBoxSelect(QWidget):
-    """ A simple checkbox selection widget. """
+    """A simple checkbox selection widget."""
 
     selectionChanged = Signal(list)
     """ Signal emitted when the selection changes. """
 
     def __init__(self, labels: list[str] = []):
-        """ Initialize the checkbox selection widget.
+        """Initialize the checkbox selection widget.
 
         Parameters
         ----------
@@ -787,15 +802,15 @@ class QCheckBoxSelect(QWidget):
 
     @Slot()
     def _on_change(self):
-        """ Emit current selection when changed. """
+        """Emit current selection when changed."""
         self.selectionChanged.emit(self.get_selected())
 
     def get_selected(self) -> list[str]:
-        """ The list of selected checkbox labels. """
+        """List of selected checkbox labels."""
         return [label for label, cb in self.checkboxes.items() if cb.isChecked()]
-    
+
     def set_selected(self, labels: list[str]):
-        """ Set selected checkboxes by label.
+        """Set selected checkboxes by label.
 
         Parameters
         ----------

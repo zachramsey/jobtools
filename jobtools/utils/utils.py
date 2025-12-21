@@ -1,42 +1,43 @@
+import re
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon, QColor, QGuiApplication
-from qt_material import get_theme   # type: ignore
-import re
+from PySide6.QtGui import QColor, QGuiApplication, QIcon
+from qt_material import get_theme  # type: ignore
 
 # --- Directory Utilities ---
 
 @cache
 def get_config_dir() -> Path:
-    """ Get the path to the JobTools app configuration directory. """
-    dir = Path(__file__).parent.parent / "configs"
-    if not dir.exists():
-        dir.mkdir(parents=True, exist_ok=True)
-    return dir
+    """Get the path to the JobTools app configuration directory."""
+    cfg_dir = Path(__file__).parent.parent / "configs"
+    if not cfg_dir.exists():
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+    return cfg_dir
 
 
 @cache
 def get_data_dir() -> Path:
-    """ Get the path to the JobTools app data directory. """
-    dir = Path(__file__).parent.parent / "data"
-    if not dir.exists():
-        dir.mkdir(parents=True, exist_ok=True)
-    return dir
+    """Get the path to the JobTools app data directory."""
+    data_dir = Path(__file__).parent.parent / "data"
+    if not data_dir.exists():
+        data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
 
 
 @cache
 def get_resource_dir() -> Path:
-    """ Get the path to the JobTools app resources directory. """
-    dir = Path(__file__).parent.parent / "resources"
-    if not dir.exists():
-        raise FileNotFoundError(f"Resources directory not found at {dir}.")
-    return dir
+    """Get the path to the JobTools app resources directory."""
+    rsrc_dir = Path(__file__).parent.parent / "resources"
+    if not rsrc_dir.exists():
+        raise FileNotFoundError(f"Resources directory not found at {rsrc_dir}.")
+    return rsrc_dir
 
 
 def get_data_sources() -> dict[str, Path]:
-    """ Get available data sources from the data directory.
+    """Get available data sources from the data directory.
 
     Returns
     -------
@@ -76,15 +77,15 @@ class ThemeColor(StrEnum):
 
 @cache
 def get_sys_theme() -> str:
-    """ Get the current system theme (`"light"` or `"dark"`). """
+    """Get the current system theme (`"light"` or `"dark"`)."""
     if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
         return "dark"
     return "light"
-    
+
 
 @cache
 def get_theme_colors() -> dict[str, str]:
-    """ Get the current theme's colors as a mapping of names to hex values. """
+    """Get the current theme's colors as a mapping of names to hex values."""
     theme_name = f"theme_{get_sys_theme()}.xml"
     theme_path = get_resource_dir() / theme_name
     if not theme_path.exists():
@@ -94,7 +95,7 @@ def get_theme_colors() -> dict[str, str]:
 
 @cache
 def get_color(color: QColor | ThemeColor | str) -> QColor:
-    """ Get a color from the current theme.
+    """Get a color from the current theme.
 
     Parameters
     ----------
@@ -125,7 +126,7 @@ def get_color(color: QColor | ThemeColor | str) -> QColor:
 def blend_colors(c1: QColor | ThemeColor | str,
                  c2: QColor | ThemeColor | str,
                  ratio: float = 0.5) -> str:
-    """ Blend two colors from the current theme.
+    """Blend two colors from the current theme.
 
     Parameters
     ----------
@@ -150,7 +151,7 @@ def blend_colors(c1: QColor | ThemeColor | str,
 
 
 def get_icon(icon_name: str, color: QColor | ThemeColor | str | None = None) -> QIcon:
-    """ Set an icon from the Material Symbols Outlined icon set.
+    """Set an icon from the Material Symbols Outlined icon set.
 
     Parameters
     ----------
@@ -170,7 +171,7 @@ def get_icon(icon_name: str, color: QColor | ThemeColor | str | None = None) -> 
     if icon.isNull():
         raise ValueError(f"Icon '{icon_name}' not found in theme.")
     pm = icon.pixmap(1024, 1024)
-    mask = pm.createMaskFromColor(QColor('transparent'), Qt.MaskMode.MaskInColor)
+    mask = pm.createMaskFromColor(QColor("transparent"), Qt.MaskMode.MaskInColor)
     color = get_color(color or ThemeColor.PRIMARY_TEXT)
     pm.fill(color)
     pm.setMask(mask)
@@ -180,7 +181,7 @@ def get_icon(icon_name: str, color: QColor | ThemeColor | str | None = None) -> 
 # --- Pattern Utilities ---
 
 def build_regex(e: list[str]|str) -> str:
-    """ Conjunct regex expressions; i.e., `"<expr1>|<expr2>|..."`. """
+    """Conjunct regex expressions; i.e., `"<expr1>|<expr2>|..."`."""
     if isinstance(e, str):
         e = [e]
     _e = []
@@ -194,35 +195,35 @@ def build_regex(e: list[str]|str) -> str:
 
 
 def AND(e: list[str]) -> str:
-    """ Conjunct search expressions; i.e., `"<expr1> AND <expr2> AND ..."`. """
+    """Conjunct search expressions; i.e., `"<expr1> AND <expr2> AND ..."`."""
     for i in range(len(e)):
         if any(op in e[i] for op in ["AND", "OR", "NOT"]):
             if len(e) > 1:
                 e[i] = f"({e[i]})"
         elif " " in e[i]:
-            e[i] = f"\"{e[i]}\""
+            e[i] = f'"{e[i]}"'
     if len(e) == 1:
         return e[0]
     return " AND ".join(e)
 
 
 def OR(e: list[str]) -> str:
-    """ Disjunct search expressions; i.e., `"<expr1> OR <expr2> OR ..."`. """
+    """Disjunct search expressions; i.e., `"<expr1> OR <expr2> OR ..."`."""
     for i, expr in enumerate(e):
         if any(op in expr for op in ["AND", "OR", "NOT"]):
             if len(e) > 1:
                 e[i] = f"({expr})"
         elif " " in expr:
-            e[i] = f"\"{expr}\""
+            e[i] = f'"{expr}"'
     if len(e) == 1:
         return e[0]
     return " OR ".join(e)
 
 
 def NOT(e: str) -> str:
-    """ Negate a search expression; i.e., `"NOT <expression>"`. """
+    """Negate a search expression; i.e., `"NOT <expression>"`."""
     if any(op in e for op in ["AND", "OR", "NOT"]):
         e = f"({e})"
     elif " " in e:
-        e = f"\"{e}\""
+        e = f'"{e}"'
     return f"NOT {e}"

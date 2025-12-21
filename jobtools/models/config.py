@@ -1,13 +1,16 @@
 # app/model.py
 import json
 from pathlib import Path
+
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
+
 from ..utils import get_config_dir
 from .jobsdata import JobsDataModel
 
 
 class TreeItem:
-    """ A node in the configuration tree. """
+    """A node in the configuration tree."""
+
     def __init__(self, data: list, parent=None):
         self._item_data = data  # [Key, Value]
         self._parent = parent
@@ -31,7 +34,7 @@ class TreeItem:
         if 0 <= column < len(self._item_data):
             return self._item_data[column]
         return None
-    
+
     def set_data(self, column, value):
         if 0 <= column < len(self._item_data):
             self._item_data[column] = value
@@ -45,7 +48,7 @@ class TreeItem:
         if self._parent:
             return self._parent._child_items.index(self)
         return 0
-    
+
     def find_child(self, key: str):
         for child in self._child_items:
             if child.data(0) == key:
@@ -54,11 +57,11 @@ class TreeItem:
 
 
 class ConfigModel(QAbstractItemModel):
-    """ The central configuration model. """
+    """The central configuration model."""
 
     jobs: JobsDataModel
     """ The JobsData instance managed by this model. """
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._root_item = TreeItem(["Property", "Value"])
@@ -70,11 +73,11 @@ class ConfigModel(QAbstractItemModel):
         self.dataChanged.connect(lambda: self.save_to_file(self._cfg_path))
 
     def load_last_config(self):
-        """ Load the last saved configuration from the persistent file. """
+        """Load the last saved configuration from the persistent file."""
         self.load_from_file(self._cfg_path)
 
     def register_page(self, page_name: str, defaults: dict) -> QModelIndex:
-        """ Register a new page in the configuration model.
+        """Register a new page in the configuration model.
 
         Parameters
         ----------
@@ -101,7 +104,7 @@ class ConfigModel(QAbstractItemModel):
             self._merge_defaults(defaults, page_item)
 
         return self.index(page_item.row(), 0, QModelIndex())
-    
+
     def _build_tree(self, data: dict, parent_item: TreeItem):
         for key, value in data.items():
             if isinstance(value, dict):
@@ -168,14 +171,14 @@ class ConfigModel(QAbstractItemModel):
         item = index.internalPointer()
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
             return item.data(index.column())
-        
+
         return None
 
     def flags(self, index):
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
-        return (Qt.ItemFlag.ItemIsEnabled | 
-                Qt.ItemFlag.ItemIsSelectable | 
+        return (Qt.ItemFlag.ItemIsEnabled |
+                Qt.ItemFlag.ItemIsSelectable |
                 Qt.ItemFlag.ItemIsEditable)
 
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
@@ -186,27 +189,27 @@ class ConfigModel(QAbstractItemModel):
                     Qt.ItemDataRole.EditRole, Qt.ItemDataRole.DisplayRole])
                 return True
         return False
-        
+
     def headerData(self, section, orientation, role):
-        if (orientation == Qt.Orientation.Horizontal and 
+        if (orientation == Qt.Orientation.Horizontal and
             role == Qt.ItemDataRole.DisplayRole):
             return self._root_item.data(section)
         return None
 
     def save_to_file(self, filepath: Path):
-        """ Save the current configuration to a JSON file. """
+        """Save the current configuration to a JSON file."""
         if not filepath.suffix == ".json":
             raise ValueError(f"Filepath must point to a JSON file. Got: {filepath}")
         data = self._recursive_dump(self._root_item)
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(data, f, indent=4)
 
     def load_from_file(self, filepath: Path):
-        """ Load configuration from a JSON file. """
+        """Load configuration from a JSON file."""
         if not filepath.suffix == ".json":
             raise ValueError(f"Filepath must point to a JSON file. Got: {filepath}")
         try:
-            with open(filepath, 'r') as f:
+            with open(filepath, "r") as f:
                 data = json.load(f)
             self._recursive_load(data, self._root_item)
             self.dataChanged.emit(QModelIndex(), QModelIndex())
@@ -215,7 +218,7 @@ class ConfigModel(QAbstractItemModel):
 
     def _recursive_dump(self, item):
         if item.child_count() == 0:
-            # Leaf item -> return its value 
+            # Leaf item -> return its value
             return item.data(1)
         # Item has children -> go deeper
         result = {}
@@ -247,14 +250,14 @@ class ConfigModel(QAbstractItemModel):
                     child_item.set_data(1, value)
 
     def get_saved_config_names(self) -> list[str]:
-        """ Get a list of saved configuration names in the config directory. """
+        """Get a list of saved configuration names in the config directory."""
         config_dir = get_config_dir()
         config_names = []
         for config_file in config_dir.iterdir():
             if config_file.suffix == ".json" and config_file.name != "persistent.json":
                 config_names.append(config_file.stem.strip().replace("_", " ").title())
         return config_names
-    
+
     def get_config_dict(self) -> dict:
-        """ Get the entire configuration as a dictionary. """
+        """Get the entire configuration as a dictionary."""
         return self._recursive_dump(self._root_item)
