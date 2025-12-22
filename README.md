@@ -18,7 +18,7 @@
 
 ---
 
-# Install from Stable Release
+# Stable Release Download
 
 *Single-file releases are planned but not yet available.*
 
@@ -34,7 +34,7 @@ git clone https://github.com/yourusername/yourproject.git
 cd yourproject
 ```
 
-*~ OR ~*
+\~*OR*\~
 
 > Download and extract repository [ZIP File](https://github.com/zachramsey/JobSpy/archive/refs/heads/main.zip)  
 > Open extracted directory in a terminal
@@ -48,7 +48,7 @@ cd yourproject
 uv run main.py
 ```
 
-*~ OR ~*
+\~*OR*\~
 
 ```bash
 # Explicitly sync the environment
