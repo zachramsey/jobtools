@@ -6,45 +6,15 @@
 
 ## Features
 
-#### Searching
-
-- Support for scraping through a proxy
-- Specify the maximum time since jobs were posted
-- Specify multiple job sites, geographical locations, and search queries
-- Run all permutations of site, location, and query in a single click
-
-#### Filtering
-
-- Select which work models and job types to include in results
-- Specify requisite and backlist terms for job titles and descriptions
-- Apply filters in real time to the active dataset
-
-#### Sorting
-
-- Apply weight to degree levels (BA/MA/PhD) mentioned in postings
-- Set location priority order (currently only supports US states)
-- Specify sets of terms at multiple weights levels to adjust job priority by term presence
-- View ordering of the active dataset in real time based on selections
-
-#### Jobs Data Viewer
-
-- Load data from past collection runs, your favorites, or a full archive of collected data
-- Add jobs to your favorites directly from the table
-- Click the job title of a listing to view full details about the job, including:
-    - Link to job-board posting, and link to direct company posting when available
-    - Date posted, title, company, location, and work model
-    - Job function, type, level, and compensation when available
-    - The full formatted job description
-- Click the company of a listing to view full company details, including:
-    - Link to company page on the job-board, and link to company website when available
-    - Company logo and name
-    - Industry, description, headcount, and revenue when available
-    - Company addresses and other contact details
-
-#### Configurations
-
-- Save your current configuration with a custom name
-- Load saved configurations
+|                                                     |                                                     |
+| --------------------------------------------------- | --------------------------------------------------- |
+| ![Jobs Viewer](docs/assets/dark/data-table.png)          | <h3>Jobs Data</h3><br><ul><li>Load data from past collection runs, your favorites, or a full archive of collected data</li><li>Add jobs to your favorites directly from the table</li><li>Click a listing's job title to view full job details</li><li>Click a listing's company to view full company details</li></ul> |
+| ![Job Details](docs/assets/dark/job-details.png)         | <h3>Job Details</h3><br><ul><li>Link to job-board posting, and link to direct company posting when available</li><li>Date posted, title, company, location, and work model</li><li>Job function, type, level, and compensation when available</li><li>Full formatted job description</li></ul> |
+| ![Company Details](docs/assets/dark/company-details.png) | <h3>Company Details</h3><br><ul><li>Link to company page on the job-board, and link to company website when available</li><li>Company logo and name</li><li>Industry, description, headcount, and revenue when available</li><li>Company addresses and other contact details</li></ul> |
+| ![Search Page](docs/assets/dark/search-page.png)         | <h3>Collection</h3><br><ul><li>Specify the maximum time since jobs were posted</li><li>Specify multiple job sites, geographical locations, and search queries</li><li>Run all permutations of site, location, and query in a single click</li></ul> |
+| ![Filter Page](docs/assets/dark/filter-page.png)         | <h3>Filtering</h3><br><ul><li>Select which work models and job types to include in results</li><li>Specify requisite and backlist terms for job titles and descriptions</li><li>Apply filters in real time to the active dataset</li></ul> |
+| ![Sorting Page](docs/assets/dark/sort-page.png)          | <h3>Sorting</h3><br><ul><li>Apply weight to degree levels (BA/MA/PhD) mentioned in postings</li><li>Set location priority order (currently only supports US states)</li><li>Specify sets of terms at multiple weights levels to adjust job priority by term presence</li><li>View ordering of the active dataset in real time based on selections</li></ul> |
+| ![Settings Page](docs/assets/dark/settings-page.png)     | <h3>Settings</h3><br><ul><li>Support for scraping through a proxy</li><li>Save your current configuration with a custom name</li><li>Load saved configurations</li></ul> |
 
 ---
 
