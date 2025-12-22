@@ -47,7 +47,9 @@ class CollectionWorker(QObject):
     def __init__(self, data_model: JobsDataModel, config: dict, cancel_event: Event):
         super().__init__()
         self._data_model = data_model
-        self._config = config.get("collect", {})
+        self._config: dict = config.get("collect", {})
+        self._config.update(config.get("settings", {}))
+        print(self._config)
         self._cancel_event = cancel_event
 
     @Slot()
