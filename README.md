@@ -4,7 +4,7 @@
 
 ---
 
-## Features
+# Features
 
 |                                                     |                                                     |
 | --------------------------------------------------- | --------------------------------------------------- |
@@ -18,12 +18,88 @@
 
 ---
 
-## Installation
+# Install from Stable Release
 
-### Stable Release
+*Single-file releases are planned but not yet available.*
 
-*Packaged binary releases are planned but not yet available.*
+# Install From Source
 
-### From Source
+> ***Requires Python version 3.12+***
 
-TBD
+## Get a local copy of the repository
+
+```bash
+# Clone the repository with git
+git clone https://github.com/yourusername/yourproject.git
+cd yourproject
+```
+
+*~ OR ~*
+
+> Download and extract repository [ZIP File](https://github.com/zachramsey/JobSpy/archive/refs/heads/main.zip)  
+> Open extracted directory in a terminal
+
+## Setup Environment and Run The Application
+
+### *Option 1: Using uv (Recommended)*
+
+```bash
+# Run the application directly
+uv run main.py
+```
+
+*~ OR ~*
+
+```bash
+# Explicitly sync the environment
+uv sync
+
+# Activate the venv
+source .venv/bin/activate   # For macOS/Linux
+.venv\Scripts\activate.bat  # For Windows (Command Prompt)
+.venv\Scripts\Activate.ps1  # For Windows (PowerShell)
+
+# Run the application
+python main.py
+```
+
+### *Option 2: Using pip and venv*
+
+```bash
+# Create a virtual environment
+python -m venv .venv
+
+# Activate the venv
+source .venv/bin/activate   # For macOS/Linux
+.venv\Scripts\activate.bat  # For Windows (Command Prompt)
+.venv\Scripts\Activate.ps1  # For Windows (PowerShell)
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the application
+python main.py
+```
+
+### *Option 3: Using Poetry*
+
+```bash
+# Initialize and import dependencies
+poetry init --no-interaction
+poetry add $(cat requirements.txt)
+
+# Install and run
+poetry install
+poetry run python main.py
+```
+
+### *Option 4: Using Conda / Mamba*
+
+```bash
+# Create a new environment
+conda create -n jobtools python=3.12
+conda activate jobtools
+
+# Install dependencies via pip
+pip install -r requirements.txt
+```
