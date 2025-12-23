@@ -59,10 +59,10 @@ class JobsDataModel(QAbstractTableModel):
         self._fav_df = pd.DataFrame()
 
         # Internal data
-        date = dt.datetime.now().strftime("%Y%m%d")
-        time = dt.datetime.now().strftime("%H%M")
-        self._new_path = get_data_dir() / date / time
         self._load_path = Path()
+        self._new_path = Path()
+        self.__get_new_path()
+        self.collectStarted.connect(self.__get_new_path)
         self._modified = False
 
         # Dynamic view of internal data
@@ -522,10 +522,10 @@ class JobsDataModel(QAbstractTableModel):
                 source = source / "jobs_data.csv"
         if not source.exists():
             if get_data_dir() in source.parents:
-                source_str = source.relative_to(get_data_dir())
+                source_str = str(source.relative_to(get_data_dir()))
             else:
-                source_str = source
-            self._logger.warning(f"Data source not found at {source_str}.")
+                source_str = str(source)
+            self._logger.warning(f"Data source not found at {source_str.replace("/jobs_data.csv", "")}.")
             return
         # Load data
         self.__pre_load()
@@ -535,10 +535,10 @@ class JobsDataModel(QAbstractTableModel):
         self._modified = False
         self.__post_load()
         if get_data_dir() in source.parents:
-            source_str = source.relative_to(get_data_dir())
+            source_str = str(source.relative_to(get_data_dir()))
         else:
-            source_str = source
-        self._logger.info(f"Loaded {len(self._df)} jobs from {source_str}")
+            source_str = str(source)
+        self._logger.info(f"Loaded {len(self._df)} jobs from {source_str.replace("/jobs_data.csv", "")}.")
 
     def update(self, other, inplace: bool = True):
         """Update this `JobsData` instance with another `JobsData` or DataFrame."""
@@ -740,6 +740,13 @@ class JobsDataModel(QAbstractTableModel):
         new._sort_order = self._sort_order
         return new
 
+    def __get_new_path(self):
+        """Generate a new output path based on the current date and time."""
+        now = dt.datetime.now()
+        date = now.strftime("%Y%m%d")
+        time = now.strftime("%H%M")
+        self._new_path = get_data_dir() / date / time
+
     def __calc_col_len_thresh(self, col: str, method: str = "iqr") -> int:
         """Calculate string length threshold for wrapping long text in the specified column."""
         if isinstance(self._df[col].iloc[0], list):
@@ -784,7 +791,7 @@ class JobsDataModel(QAbstractTableModel):
         if path is None:
             path = self.path
         elif path.suffix == f".{extension}":
-            JobsDataModel._logger.warning("Expected directory path, got file path: "
+            self._logger.warning("Expected directory path, got file path: "
                                     f"{path}. Using parent directory instead.")
             path = path.parent
         # Ensure output directory exists
@@ -830,10 +837,10 @@ class JobsDataModel(QAbstractTableModel):
         # Save DataFrame to CSV
         data.to_csv(file, index=False)
         if get_data_dir() in file.parents:
-            file_str = file.relative_to(get_data_dir())
+            file_str = str(file.relative_to(get_data_dir()))
         else:
-            file_str = file
-        JobsDataModel._logger.info(f"Saved {len(data)} jobs to {file_str}")
+            file_str = str(file)
+        self._logger.info(f"Saved {len(data)} jobs to {file_str.replace('/jobs_data.csv', '')}.")
         return file
 
     def export_html(self,
@@ -876,5 +883,5 @@ class JobsDataModel(QAbstractTableModel):
             file_str = file.relative_to(get_data_dir())
         else:
             file_str = file
-        JobsDataModel._logger.info(f"Exported {len(self._df)} jobs to {file_str}")
+        self._logger.info(f"Exported {len(self._df)} jobs to {file_str}")
         return file
