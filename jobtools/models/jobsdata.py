@@ -5,6 +5,7 @@ import queue
 import re
 import threading
 import time
+import traceback
 from pathlib import Path
 from typing import Callable
 
@@ -17,10 +18,73 @@ from markdownify import (  # type: ignore
     UNDERSCORE,
     MarkdownConverter,  # type: ignore
 )
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
 from PySide6.QtGui import QColor, QFont
 
 from ..utils import HTMLBuilder, JDLogger, build_regex, get_data_dir, get_data_sources, parse_degrees, parse_location
+
+
+class CollectionWorker(QObject):
+    """Worker for running job data collection in a separate thread."""
+
+    finished = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, data_model: "JobsDataModel", config: dict, cancel_event: threading.Event):
+        super().__init__()
+        self._data_model = data_model
+        self._config: dict = config.get("collect", {})
+        self._config.update(config.get("settings", {}))
+        self._cancel_event = cancel_event
+
+    @Slot()
+    def run(self):
+        """Run the job data collection process.
+
+        Yields
+        ------
+        finished : str
+            Emitted with the path to the generated CSV file upon completion.
+        error : str
+            Emitted with the error message if an exception occurs.
+        """
+        try:
+            # Signal that collection has started
+            self._data_model.collectStarted.emit()
+            # Initialize JobsData
+            source = self._config.get("data_source", "")
+            if source:
+                self._data_model.load_data(source)
+            self._data_model.logger.info("Starting job collection...")
+            # Run collection and sorting for each query
+            for query in self._config.get("queries", []):
+                # Job collection
+                self._data_model.collect(
+                    site_name=self._config.get("sites_selected", []),
+                    search_term=query,
+                    job_type=None,  # type: ignore
+                    locations=self._config.get("locations_selected", []),
+                    results_wanted=10000, # TODO: Make arbitrarily large "maximum" value configurable
+                    proxy=self._config.get("proxy", ""),
+                    hours_old=self._config.get("hours_old", 0),
+                    cancel_event=self._cancel_event
+                )
+                # Check for cancellation
+                if self._cancel_event and self._cancel_event.is_set():
+                    self._data_model.logger.info("Job collection cancelled by user.")
+                    break
+                # Save intermediate CSV
+                csv_path = self._data_model.export_csv()
+            # Add final data to archive
+            self._data_model.update_archive()
+            # Emit finished signal
+            if self._cancel_event and self._cancel_event.is_set():
+                self.finished.emit("")
+            else:
+                self.finished.emit(str(csv_path))
+                self._data_model.collectFinished.emit(str(csv_path))
+        except Exception:
+            self.error.emit(traceback.format_exc())
 
 
 class JobsDataModel(QAbstractTableModel):
