@@ -1,7 +1,7 @@
 from PySide6.QtCore import QModelIndex, Qt, Signal, Slot
 from PySide6.QtWidgets import QHBoxLayout, QRadioButton, QSpinBox, QVBoxLayout, QWidget
 
-from ..models import ConfigModel, JobsDataModel
+from ..models import ConfigModel
 from ..utils.location_parser import NAME_TO_ABBR
 from .widgets import QChipSelect, QHeader
 
@@ -151,12 +151,11 @@ class DegreeValueSelector(QWidget):
 
 
 class SortPage(QWidget):
-    def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
+    def __init__(self, config_model: ConfigModel):
         super().__init__()
         self._config_model = config_model
-        self._data_model = data_model
-        self._idcs: dict[str, QModelIndex] = {}
-        self.defaults: dict = {}
+        defaults: dict = {}
+
         self.setLayout(QVBoxLayout(self))
         self.layout().setSpacing(20)
 
@@ -168,7 +167,7 @@ class SortPage(QWidget):
         self.dv_selector = DegreeValueSelector()
         dv_layout.addWidget(self.dv_selector, 1)
         self.layout().addLayout(dv_layout)
-        self.defaults["degree_values"] = (0, 0, 0)
+        defaults["degree_values"] = (0, 0, 0)
 
         # Location order selection
         lo_layout = QVBoxLayout()
@@ -179,8 +178,8 @@ class SortPage(QWidget):
         self.lo_selector = QChipSelect(base_items=available, enable_creator=False)
         lo_layout.addWidget(self.lo_selector)
         self.layout().addLayout(lo_layout)
-        self.defaults["location_order_selected"] = []
-        self.defaults["location_order_available"] = available
+        defaults["location_order_selected"] = []
+        defaults["location_order_available"] = available
 
         # Term emphasis selections
         levels = {3: ("High Emphasis Terms (+3)", HE_TT),
@@ -197,21 +196,14 @@ class SortPage(QWidget):
             self.te_selectors[value] = selector
             te_layout.addWidget(selector)
             self.layout().addLayout(te_layout)
-            self.defaults[f"terms_selected_{str(value)}"] = []
-            self.defaults[f"terms_available_{str(value)}"] = []
+            defaults[f"terms_selected_{str(value)}"] = []
+            defaults[f"terms_available_{str(value)}"] = []
 
         # Push content to top
         self.layout().addStretch()
 
         # Register page with config model
-        root_index = self._config_model.register_page("sort", self.defaults)
-
-        # Map keys to config model indices
-        for row in range(self._config_model.rowCount(root_index)):
-            idx = self._config_model.index(row, 0, root_index)
-            key = self._config_model.data(idx)
-            val_idx = self._config_model.index(row, 1, root_index)
-            self._idcs[key] = val_idx
+        self._config_model.register_page("sort", defaults)
 
         # Connect view to config model
         self.dv_selector.valuesChanged.connect(
@@ -235,50 +227,31 @@ class SortPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update config model from view changes."""
-        idx = self._idcs.get(key)
+        idx = self._config_model.idcs.get(key)
         if idx is not None:
             self._config_model.setData(idx, value, Qt.ItemDataRole.EditRole)
-
-    def __get_value(self, key: str, top_left: QModelIndex):
-        """Get value from config model for a specific key."""
-        idx = self._idcs.get(key)
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
-            if val is None:
-                val = self.defaults[key]
-            return val
-        return None
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when config model changes."""
         # Degree values
-        val = self.__get_value("degree_values", top_left)
+        val = self._config_model.get_value("degree_values", top_left)
         if val is not None and val != self.dv_selector.get_values():
             self.dv_selector.set_values(*val)
-            self._data_model.update_degree_score(val)
-            self._data_model.standard_ordering()
 
         # Location order
-        val = self.__get_value("location_order_available", top_left)
+        val = self._config_model.get_value("location_order_available", top_left)
         if val is not None and val != self.lo_selector.get_available():
             self.lo_selector.set_available(val)
-        val = self.__get_value("location_order_selected", top_left)
+        val = self._config_model.get_value("location_order_selected", top_left)
         if val is not None and val != self.lo_selector.get_selected():
             self.lo_selector.set_selected(val)
-            self._data_model.update_rank_order_score("state", val, "location_score")
-            self._data_model.standard_ordering()
 
         # Term emphasis selectors
-        kw_val_map = {}
         for value, selector in self.te_selectors.items():
-            val = self.__get_value(f"terms_available_{str(value)}", top_left)
+            val = self._config_model.get_value(f"terms_available_{str(value)}", top_left)
             if val is not None and val != selector.get_available():
                 selector.set_available(val)
-            val = self.__get_value(f"terms_selected_{str(value)}", top_left)
+            val = self._config_model.get_value(f"terms_selected_{str(value)}", top_left)
             if val is not None and val != selector.get_selected():
                 selector.set_selected(val)
-                kw_val_map[value] = val
-        if kw_val_map:
-            self._data_model.update_keyword_score(kw_val_map)
-            self._data_model.standard_ordering()

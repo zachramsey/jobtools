@@ -62,8 +62,7 @@ class QHeader(QWidget):
             help_btn.setProperty("class", "help-button")
             help_btn.setToolTip(tooltip)
             self.layout().addWidget(help_btn)   # type: ignore
-        self.layout().addStretch()          # type: ignore
-
+        self.layout().setSizeConstraint(QHBoxLayout.SizeConstraint.SetFixedSize)  # type: ignore
 
 class QWebImageLabel(QLabel):
     """QLabel that loads and displays an image from a web URL."""

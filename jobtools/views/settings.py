@@ -26,8 +26,8 @@ class SettingsPage(QWidget):
         super().__init__()
         self._config_model = config_model
         self._data_model = data_model
-        self._idcs: dict[str, QModelIndex] = {}
-        self.defaults: dict = {}
+        defaults: dict = {}
+
         self.setLayout(QVBoxLayout(self))
         self.layout().setSpacing(20)
 
@@ -80,20 +80,13 @@ class SettingsPage(QWidget):
         proxy_layout.addWidget(self.p_editor)
         proxy_layout.addStretch()
         self.layout().addLayout(proxy_layout)
-        self.defaults["proxy"] = ""
+        defaults["proxy"] = ""
 
         # Push content to top
         self.layout().addStretch()
 
         # Register page with config model
-        root_index = self._config_model.register_page("settings", self.defaults)
-
-        # Map keys to config model indices
-        for row in range(self._config_model.rowCount(root_index)):
-            idx = self._config_model.index(row, 0, root_index)
-            key = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val_idx = self._config_model.index(row, 1, root_index)
-            self._idcs[key] = val_idx
+        self._config_model.register_page("settings", defaults)
 
         # Connect view to config model
         self.p_editor.textChanged.connect(
@@ -108,24 +101,14 @@ class SettingsPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update model data from view changes."""
-        if key in self._idcs:
-            self._config_model.setData(self._idcs[key], value, Qt.ItemDataRole.EditRole)
-
-    def __get_value(self, key: str, top_left: QModelIndex):
-        """Get value from model for a specific key."""
-        idx = self._idcs.get(key)
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
-            if val is None:
-                val = self.defaults[key]
-            return val
-        return None
+        if key in self._config_model.idcs:
+            self._config_model.setData(self._config_model.idcs[key], value, Qt.ItemDataRole.EditRole)
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when model data changes."""
         # Proxy
-        val = self.__get_value("proxy", top_left)
+        val = self._config_model.get_value("proxy", top_left)
         if val is not None and val != self.p_editor.text().strip():
             self.p_editor.setText(val)
 
@@ -137,8 +120,13 @@ class SettingsPage(QWidget):
             return
         config_name = config_name.replace(" ", "_").lower()
         config_path = get_config_dir() / f"{config_name}.json"
+        # Temporarily disconnect to avoid triggering updates
+        self._config_model.dataChanged.disconnect(self._data_model._on_config_changed)
+        # Load config and update data model
         self._config_model.load_from_file(config_path)
-        self._config_model.dataChanged.emit(QModelIndex(), QModelIndex())
+        self._data_model.init_config()
+        # Reconnect signal
+        self._config_model.dataChanged.connect(self._data_model._on_config_changed)
         # Update config edit box
         self.config_edit.setText(config_name)
 

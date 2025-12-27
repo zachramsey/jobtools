@@ -5,7 +5,6 @@ from pathlib import Path
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt
 
 from ..utils import get_config_dir
-from .jobsdata import JobsDataModel
 
 
 class TreeItem:
@@ -59,16 +58,15 @@ class TreeItem:
 class ConfigModel(QAbstractItemModel):
     """The central configuration model."""
 
-    jobs: JobsDataModel
-    """ The JobsData instance managed by this model. """
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._root_item = TreeItem(["Property", "Value"])
-
+        # Mapping of config keys to their QModelIndex
+        self.idcs = {}
+        # Default values for config keys
+        self.defaults = {}
         # Path to persistent config file
         self._cfg_path = get_config_dir() / "persistent.json"
-
         # Auto-save on data change
         self.dataChanged.connect(lambda: self.save_to_file(self._cfg_path))
 
@@ -76,7 +74,7 @@ class ConfigModel(QAbstractItemModel):
         """Load the last saved configuration from the persistent file."""
         self.load_from_file(self._cfg_path)
 
-    def register_page(self, page_name: str, defaults: dict) -> QModelIndex:
+    def register_page(self, page_name: str, defaults: dict):
         """Register a new page in the configuration model.
 
         Parameters
@@ -85,11 +83,6 @@ class ConfigModel(QAbstractItemModel):
             Name identifier for the page.
         defaults : dict
             Default configuration values for the page.
-
-        Returns
-        -------
-        QModelIndex
-            The index of the root item for the registered page.
         """
         root = self._root_item
         page_item = root.find_child(page_name)
@@ -103,7 +96,16 @@ class ConfigModel(QAbstractItemModel):
         else:
             self._merge_defaults(defaults, page_item)
 
-        return self.index(page_item.row(), 0, QModelIndex())
+        # Update defaults
+        self.defaults.update(defaults)
+
+        # Update name-index mapping
+        page_root = self.index(page_item.row(), 0, QModelIndex())
+        for row in range(self.rowCount(page_root)):
+            idx = self.index(row, 0, page_root)
+            key = self.data(idx, Qt.ItemDataRole.DisplayRole)
+            val_idx = self.index(row, 1, page_root)
+            self.idcs[key] = val_idx
 
     def _build_tree(self, data: dict, parent_item: TreeItem):
         for key, value in data.items():
@@ -215,6 +217,32 @@ class ConfigModel(QAbstractItemModel):
             self.dataChanged.emit(QModelIndex(), QModelIndex())
         except FileNotFoundError:
             pass
+
+    def get_value(self, key: str, top_left: QModelIndex|None = None):
+        """Get value from model for a specific key.
+
+        Parameters
+        ----------
+        key : str
+            Configuration key to retrieve.
+        top_left : QModelIndex | None, optional
+            If provided, only return the value if the key's index matches
+            the top_left index. Default is None.
+
+        Returns
+        -------
+        The value associated with the key, or None if not found.
+        """
+        idx = self.idcs.get(key)
+        if idx is not None:
+            if top_left is not None:
+                if top_left.isValid() and idx != top_left:
+                    return None
+            val = self.data(idx, Qt.ItemDataRole.DisplayRole)
+            if val is None:
+                val = self.defaults.get(key)
+            return val
+        return None
 
     def _recursive_dump(self, item):
         if item.child_count() == 0:

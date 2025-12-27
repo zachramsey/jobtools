@@ -2,7 +2,7 @@ from jobspy.model import JobType  # type: ignore
 from PySide6.QtCore import QModelIndex, Qt, Slot
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
-from ..models import ConfigModel, JobsDataModel
+from ..models import ConfigModel
 from .widgets import QCheckBoxSelect, QChipSelect, QHeader
 
 WM_TT = """Select which work models to include in results.\n
@@ -35,12 +35,11 @@ Accepts single words, multi-word phrases, and regular expressions."""
 
 
 class FilterPage(QWidget):
-    def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
+    def __init__(self, config_model: ConfigModel):
         super().__init__()
         self._config_model = config_model
-        self._data_model = data_model
-        self._idcs: dict[str, QModelIndex] = {}
-        self.defaults: dict = {}
+        defaults: dict = {}
+
         self.setLayout(QVBoxLayout(self))
         self.layout().setSpacing(20)
 
@@ -52,7 +51,7 @@ class FilterPage(QWidget):
         self.wm_selector = QCheckBoxSelect(["remote", "onsite"])
         wm_layout.addWidget(self.wm_selector, 1)
         self.layout().addLayout(wm_layout)
-        self.defaults["work_models"] = []
+        defaults["work_models"] = []
 
         # Job type selector
         jt_layout = QHBoxLayout()
@@ -62,7 +61,7 @@ class FilterPage(QWidget):
         self.jt_selector = QCheckBoxSelect([jt.value[0] for jt in JobType])
         jt_layout.addWidget(self.jt_selector, 1)
         self.layout().addLayout(jt_layout)
-        self.defaults["job_types"] = []
+        defaults["job_types"] = []
 
         # Title exclude editor
         te_layout = QVBoxLayout()
@@ -72,8 +71,8 @@ class FilterPage(QWidget):
         self.te_editor = QChipSelect()
         te_layout.addWidget(self.te_editor)
         self.layout().addLayout(te_layout)
-        self.defaults["title_exclude_selected"] = []
-        self.defaults["title_exclude_available"] = []
+        defaults["title_exclude_selected"] = []
+        defaults["title_exclude_available"] = []
 
         # Title require editor
         tr_layout = QVBoxLayout()
@@ -83,8 +82,8 @@ class FilterPage(QWidget):
         self.tr_editor = QChipSelect()
         tr_layout.addWidget(self.tr_editor)
         self.layout().addLayout(tr_layout)
-        self.defaults["title_require_selected"] = []
-        self.defaults["title_require_available"] = []
+        defaults["title_require_selected"] = []
+        defaults["title_require_available"] = []
 
         # Description exclude editor
         de_layout = QVBoxLayout()
@@ -94,8 +93,8 @@ class FilterPage(QWidget):
         self.de_editor = QChipSelect()
         de_layout.addWidget(self.de_editor)
         self.layout().addLayout(de_layout)
-        self.defaults["descr_exclude_selected"] = []
-        self.defaults["descr_exclude_available"] = []
+        defaults["descr_exclude_selected"] = []
+        defaults["descr_exclude_available"] = []
 
         # Description require editor
         dr_layout = QVBoxLayout()
@@ -105,21 +104,14 @@ class FilterPage(QWidget):
         self.dr_editor = QChipSelect()
         dr_layout.addWidget(self.dr_editor)
         self.layout().addLayout(dr_layout)
-        self.defaults["descr_require_selected"] = []
-        self.defaults["descr_require_available"] = []
+        defaults["descr_require_selected"] = []
+        defaults["descr_require_available"] = []
 
         # Push content to top
         self.layout().addStretch()
 
         # Register page with config model
-        root_index = self._config_model.register_page("filter", self.defaults)
-
-        # Map keys to config model indices
-        for row in range(self._config_model.rowCount(root_index)):
-            idx = self._config_model.index(row, 0, root_index)
-            key = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
-            val_idx = self._config_model.index(row, 1, root_index)
-            self._idcs[key] = val_idx
+        self._config_model.register_page("filter", defaults)
 
         # Connect view to config model
         self.wm_selector.selectionChanged.connect(
@@ -152,74 +144,57 @@ class FilterPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update model data from view changes."""
-        idx = self._idcs.get(key)
+        idx = self._config_model.idcs.get(key)
         if idx is not None:
             self._config_model.setData(idx, value, Qt.ItemDataRole.EditRole)
-
-    def __get_value(self, key: str, top_left: QModelIndex):
-        """Get value from model for a specific key."""
-        idx = self._idcs.get(key)
-        if idx is not None and (not top_left.isValid() or top_left == idx):
-            val = self._config_model.data(idx, Qt.ItemDataRole.DisplayRole)
-            if val is None:
-                val = self.defaults[key]
-            return val
-        return None
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when model data changes."""
         # Work model selector
-        val = self.__get_value("work_models", top_left)
+        val = self._config_model.get_value("work_models", top_left)
         if val is not None:
             if val != self.wm_selector.get_selected():
                 self.wm_selector.set_selected(val)
-            val = [wm.upper() == "remote" for wm in val]
-            self._data_model.set_filter("work_models", "is_remote", val)
 
         # Job type selector
-        val = self.__get_value("job_types", top_left)
+        val = self._config_model.get_value("job_types", top_left)
         if val is not None:
             if val != self.jt_selector.get_selected():
                 self.jt_selector.set_selected(val)
-            self._data_model.set_filter("job_types", "job_type", val)
 
         # Title exclude editor
-        val = self.__get_value("title_exclude_available", top_left)
+        val = self._config_model.get_value("title_exclude_available", top_left)
         if val is not None and val != self.te_editor.get_available():
             self.te_editor.set_available(val)
-        val = self.__get_value("title_exclude_selected", top_left)
+        val = self._config_model.get_value("title_exclude_selected", top_left)
         if val is not None:
             if val != self.te_editor.get_selected():
                 self.te_editor.set_selected(val)
-            self._data_model.set_filter("title_exclude", "title", val, invert=True)
 
         # Title require editor
-        val = self.__get_value("title_require_available", top_left)
+        val = self._config_model.get_value("title_require_available", top_left)
         if val is not None and val != self.tr_editor.get_available():
             self.tr_editor.set_available(val)
-        val = self.__get_value("title_require_selected", top_left)
+        val = self._config_model.get_value("title_require_selected", top_left)
         if val is not None:
             if val != self.tr_editor.get_selected():
                 self.tr_editor.set_selected(val)
-            self._data_model.set_filter("title_require", "title", val)
 
         # Description exclude editor
-        val = self.__get_value("descr_exclude_available", top_left)
+        val = self._config_model.get_value("descr_exclude_available", top_left)
         if val is not None and val != self.de_editor.get_available():
             self.de_editor.set_available(val)
-        val = self.__get_value("descr_exclude_selected", top_left)
+        val = self._config_model.get_value("descr_exclude_selected", top_left)
         if val is not None:
             if val != self.de_editor.get_selected():
                 self.de_editor.set_selected(val)
-            self._data_model.set_filter("descr_exclude", "description", val, invert=True)
 
         # Description require editor
-        val = self.__get_value("descr_require_available", top_left)
+        val = self._config_model.get_value("descr_require_available", top_left)
         if val is not None and val != self.dr_editor.get_available():
             self.dr_editor.set_available(val)
-        val = self.__get_value("descr_require_selected", top_left)
+        val = self._config_model.get_value("descr_require_selected", top_left)
         if val is not None:
             if val != self.dr_editor.get_selected():
                 self.dr_editor.set_selected(val)
-            self._data_model.set_filter("descr_require", "description", val)

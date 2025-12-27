@@ -1,192 +1,108 @@
 import datetime as dt
-import multiprocessing as mp
 import os
-import queue
-import re
-import threading
 import time
-import traceback
-from pathlib import Path
 from typing import Callable
 
 import numpy as np
 import pandas as pd  # type: ignore
-from jobspy import desired_order, scrape_jobs  # type: ignore
-from markdownify import (  # type: ignore
-    ATX,
-    SPACES,
-    UNDERSCORE,
-    MarkdownConverter,  # type: ignore
-)
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, Slot
+from markdownify import ATX, SPACES, UNDERSCORE, MarkdownConverter  # type: ignore
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal, Slot
 from PySide6.QtGui import QColor, QFont
 
-from ..utils import HTMLBuilder, JDLogger, build_regex, get_data_dir, get_data_sources, parse_degrees, parse_location
+from ..utils import JDLogger, build_regex, get_data_dir, parse_degrees, parse_location
+from . import ConfigModel
 
-
-class CollectionWorker(QObject):
-    """Worker for running job data collection in a separate thread."""
-
-    finished = Signal(str)
-    error = Signal(str)
-
-    def __init__(self, data_model: "JobsDataModel", config: dict, cancel_event: threading.Event):
-        super().__init__()
-        self._data_model = data_model
-        self._config: dict = config.get("collect", {})
-        self._config.update(config.get("settings", {}))
-        self._cancel_event = cancel_event
-
-    @Slot()
-    def run(self):
-        """Run the job data collection process.
-
-        Yields
-        ------
-        finished : str
-            Emitted with the path to the generated CSV file upon completion.
-        error : str
-            Emitted with the error message if an exception occurs.
-        """
-        try:
-            # Signal that collection has started
-            self._data_model.collectStarted.emit()
-            # Initialize JobsData
-            source = self._config.get("data_source", "")
-            if source:
-                self._data_model.load_data(source)
-            self._data_model.logger.info("Starting job collection...")
-            # Run collection and sorting for each query
-            for query in self._config.get("queries", []):
-                # Job collection
-                self._data_model.collect(
-                    site_name=self._config.get("sites_selected", []),
-                    search_term=query,
-                    job_type=None,  # type: ignore
-                    locations=self._config.get("locations_selected", []),
-                    results_wanted=10000, # TODO: Make arbitrarily large "maximum" value configurable
-                    proxy=self._config.get("proxy", ""),
-                    hours_old=self._config.get("hours_old", 0),
-                    cancel_event=self._cancel_event
-                )
-                # Check for cancellation
-                if self._cancel_event and self._cancel_event.is_set():
-                    self._data_model.logger.info("Job collection cancelled by user.")
-                    break
-                # Save intermediate CSV
-                csv_path = self._data_model.export_csv()
-            # Add final data to archive
-            self._data_model.update_archive()
-            # Emit finished signal
-            if self._cancel_event and self._cancel_event.is_set():
-                self.finished.emit("")
-            else:
-                self.finished.emit(str(csv_path))
-                self._data_model.collectFinished.emit(str(csv_path))
-        except Exception:
-            self.error.emit(traceback.format_exc())
+FOOBAR_DATA = {
+    "id": "li-0000000000",
+    "site": "linkedin",
+    "job_url": "https://www.linkedin.com/jobs/view/0000000000",
+    "job_url_direct": "https://careers.example.com/",
+    "title": "Example Job Title",
+    "company": "Example Company",
+    "location": "Example City, EX, USA",
+    "date_posted": "1970-01-01",
+    "job_type": "fulltime",
+    "salary_source": "direct_data",
+    "interval": "yearly",
+    "min_amount": 100000.0,
+    "max_amount": 150000.0,
+    "currency": "USD",
+    "is_remote": "False",
+    "job_level": "mid-senior_level",
+    "job_function": "Engineering and Information Technology",
+    "listing_type": "",
+    "emails": "careers@example.com",
+    "description": "This is an example job description used as placeholder \
+                    data. It provides details about the job responsibilities, \
+                    requirements, and qualifications needed for the position.",
+    "company_industry": "Internet and Software",
+    "company_url": "https://www.linkedin.com/company/example",
+    "company_logo": "https://upload.wikimedia.org/wikipedia/commons/8/8b/Wikimedia-logo_black.svg",
+    "company_url_direct": "https://www.example.com",
+    "company_addresses": "123 Example St, Example City, EX 12345",
+    "company_num_employees": "201 to 500",
+    "company_revenue": "$5M to $25M",
+    "company_description": "Example Company is a leading provider of example \
+                            solutions, dedicated to delivering high-quality \
+                            products and services to our customers worldwide.",
+    "skills": "Example Skill 1; Example Skill 2; Example Skill 3",
+    "experience_range": "3-5 years",
+    "company_rating": "4.5",
+    "company_reviews_count": "150",
+    "vacancy_count": "3",
+    "work_from_home_type": "hybrid",
+}
 
 
 class JobsDataModel(QAbstractTableModel):
     """Wrapper around jobspy API to collect and process job postings."""
 
     collectStarted = Signal()       # noqa: N815
-    collectFinished = Signal(str)   # noqa: N815
+    collectFinished = Signal()   # noqa: N815
 
-    _logger = JDLogger()
+    logger = JDLogger()
     _converter = MarkdownConverter(
         bullets="*", default_title=True, escape_misc=False,
         heading_style=ATX, newline_style=SPACES, strong_em_symbol=UNDERSCORE
     )
 
-    def __init__(self, data: pd.DataFrame|Path|str = pd.DataFrame()):
-        """Initialize the job collector.
-
-        Parameters
-        ----------
-        data : pd.DataFrame|Path|str, optional
-            Initial data to populate the JobsData instance.
-            - *DataFrame* : use the provided DataFrame as initial data.
-            - *Path* : load data from the specified CSV file.
-            - *"latest"* : load data from the most recent run.
-            - *"favorites"* : load data from the favorites data path.
-            - *"archive"* : load data from the archive data path.
-        """
+    def __init__(self, config_model: ConfigModel):
+        """Initialize the JobsDataModel instance."""
         super().__init__()
+        self._config_model = config_model
 
-        # Specialized data sources
-        self._foobar_path = get_data_dir() / "foobar"   # Placeholder data path
-        self._arch_path = get_data_dir() / "archive"
-        os.makedirs(self._arch_path, exist_ok=True)
-        self._fav_path = get_data_dir() / "favorites"
-        os.makedirs(self._fav_path, exist_ok=True)
-        self._fav_df = pd.DataFrame()
-
-        # Internal data
-        self._load_path = Path()
-        self._new_path = Path()
-        self.__get_new_path()
-        self.collectStarted.connect(self.__get_new_path)
-        self._modified = False
+        # Raw data storage
+        self._original_df = pd.DataFrame([FOOBAR_DATA])
+        # Intermediate data to be used in dynamic view
+        self._active_df = pd.DataFrame()
+        # Dynamic data view
+        self._dynamic_df = pd.DataFrame()
 
         # Dynamic view of internal data
-        self.columns: list[str] = []
+        self.active_days = 7
+        self.display_favorites = False
+        self.columns = self._original_df.columns.tolist()
         self._col_len_thresh: dict[str, int] = {}
         self._header_labels: dict[str, str] = {}
-        self._filter_masks: dict[str, pd.Series] = {}
+        self._filters: dict[str, tuple[str, list[str]|str|bool|int|float|pd.Series|Callable, bool]] = {}
         self._sort_column = None
         self._sort_order = Qt.SortOrder.AscendingOrder
 
+        # Standard ordering
+        self._degree_values: tuple[int, int, int] = (0, 0, 0)
+        self._keyword_score_map: dict[int, list[str]] = {}
+        self._rank_orders: dict[str, tuple[str, dict[str, int]]] = {}
+        self.standard_order = ["date_posted", "location_score", "degree_score",
+                               "keyword_score", "site_score"]
+
         # Initialize data
-        if isinstance(data, pd.DataFrame):
-            self.__pre_load()
-            self._df = data.copy()
-            self.__prep_data()
-            self.__post_load()
-            self._logger.info(f"Initialized {len(self._df)} jobs from DataFrame.")
+        self._arch_path = get_data_dir()
+        arch_file = self._arch_path / "jobs_data.csv"
+        if os.path.exists(arch_file):
+            self._original_df = pd.read_csv(arch_file)
+            self.logger.info(f"Loaded archived jobs data from '{arch_file}'.")
         else:
-            self.load_data(data)
-
-        # Visible columns
-        self.columns = self._df.columns.tolist()
-
-    def __len__(self) -> int:
-        """Get the number of collected job postings."""
-        return len(self._df)
-
-    def __getattr__(self, name):
-        """Delegate attribute access to the underlying DataFrame."""
-        return getattr(self._df, name)
-
-    def __getitem__(self, key):
-        """Get item(s) from the underlying DataFrame."""
-        result = self._df[key]
-        if isinstance(result, pd.DataFrame):
-            jobs = JobsDataModel(data=result)
-            jobs._new_path = self._new_path
-            jobs._load_path = self._load_path
-            jobs._modified = self._modified
-            return jobs
-        return result
-
-    def __setitem__(self, key, value):
-        """Set item(s) in the underlying DataFrame."""
-        self._df[key] = value
-
-    @property
-    def path(self) -> Path:
-        """Get the output path for saving data."""
-        if self._load_path in [self._fav_path, self._arch_path]:
-            return self._load_path
-        elif self._modified or not self._load_path:
-            return self._new_path
-        else:
-            return self._load_path
-
-    @property
-    def logger(self) -> JDLogger:
-        """Get the JobsData logger instance."""
-        return self._logger
+            self.logger.info(f"No archived jobs data found at '{arch_file}'.")
 
     @classmethod
     def set_log_level(cls, level: str):
@@ -197,11 +113,167 @@ class JobsDataModel(QAbstractTableModel):
         level : str
             Logging level (e.g., "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL").
         """
-        cls._logger.set_level(level)
+        cls.logger.set_level(level)
 
-    #################################
-    ## QAbstractTableModel Methods ##
-    #################################
+    ##################################
+    ##        Config Handling       ##
+    ##################################
+
+    def init_config(self):
+        """Initialize data model with current config settings."""
+        work_models_val = [wm.upper() == "REMOTE" for wm in self._config_model.get_value("work_models")]
+        self.set_filter("work_models", "is_remote", work_models_val)
+        job_types_val = self._config_model.get_value("job_types")
+        self.set_filter("job_types", "job_type", job_types_val)
+        title_exclude_val = self._config_model.get_value("title_exclude_selected")
+        self.set_filter("title_exclude", "title", title_exclude_val, invert=True)
+        title_require_val = self._config_model.get_value("title_require_selected")
+        self.set_filter("title_require", "title", title_require_val)
+        descr_exclude_val = self._config_model.get_value("descr_exclude_selected")
+        self.set_filter("descr_exclude", "description", descr_exclude_val, invert=True)
+        descr_require_val = self._config_model.get_value("descr_require_selected")
+        self.set_filter("descr_require", "description", descr_require_val)
+
+        sites_selected_val = self._config_model.get_value("sites_selected")
+        self.set_rank_order("site", sites_selected_val, "site_score")
+        degree_values_val = self._config_model.get_value("degree_values")
+        self.set_degree_values(degree_values_val)
+        location_order_val = self._config_model.get_value("location_order_selected")
+        self.set_rank_order("state", location_order_val, "location_score")
+        kw_keys = [key for key, _ in self._config_model.idcs.items() if key.startswith("terms_selected_")]
+        keyword_score_map = {int(key.split("_")[-1]): self._config_model.get_value(key) for key in kw_keys}
+        self.set_keyword_score_map(keyword_score_map)
+
+        self.display_favorites = self._config_model.get_value("display_favorites")
+        self.active_days = self._config_model.get_value("max_days_old")
+
+        self.beginResetModel()
+        self.build_active_data()
+        self.apply_filters()
+        self.apply_sort()
+        self.endResetModel()
+
+    @Slot(QModelIndex, QModelIndex)
+    def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
+        """Update data model when config model changes."""
+        # Filter settings
+        filter_changed = False
+        val = self._config_model.get_value("work_models", top_left)
+        if val is not None:
+            val = [wm.upper() == "remote" for wm in val]
+            self.set_filter("work_models", "is_remote", val)
+            filter_changed = True
+        val = self._config_model.get_value("job_types", top_left)
+        if val is not None:
+            self.set_filter("job_types", "job_type", val)
+            filter_changed = True
+        val = self._config_model.get_value("title_exclude_selected", top_left)
+        if val is not None:
+            self.set_filter("title_exclude", "title", val, invert=True)
+            filter_changed = True
+        val = self._config_model.get_value("title_require_selected", top_left)
+        if val is not None:
+            self.set_filter("title_require", "title", val)
+            filter_changed = True
+        val = self._config_model.get_value("descr_exclude_selected", top_left)
+        if val is not None:
+            self.set_filter("descr_exclude", "description", val, invert=True)
+            filter_changed = True
+        val = self._config_model.get_value("descr_require_selected", top_left)
+        if val is not None:
+            self.set_filter("descr_require", "description", val)
+            filter_changed = True
+
+        # Sort settings
+        val = self._config_model.get_value("sites_selected", top_left)
+        if val is not None:
+            self.set_rank_order("site", val, "site_score")
+        val = self._config_model.get_value("degree_values", top_left)
+        if val is not None:
+            self.set_degree_values(val)
+        val = self._config_model.get_value("location_order_selected", top_left)
+        if val is not None:
+            self.set_rank_order("state", val, "location_score")
+        kw_keys = [key for key, _ in self._config_model.idcs.items() if key.startswith("keyword_values_")]
+        kw_val_map = {}
+        for key in kw_keys:
+            val = self._config_model.get_value(key, top_left)
+            if val is not None:
+                kw_val_map[int(key.split("_")[-1])] = val
+
+        # Display favorites setting
+        display_favorites_changed = False
+        display_favorites = self._config_model.get_value("display_favorites", top_left)
+        if display_favorites is not None and display_favorites != self.display_favorites:
+            self.display_favorites = display_favorites
+            display_favorites_changed = True
+
+        # Recent days setting
+        recent_days_changed = False
+        val = self._config_model.get_value("max_days_old", top_left)
+        if val is not None and val != self.active_days:
+            self.active_days = val
+            recent_days_changed = True
+
+        # Apply changes to data model
+        self.beginResetModel()
+        if filter_changed or recent_days_changed or display_favorites_changed:
+            self.build_active_data()
+            self.apply_filters()
+        self.apply_sort()
+        self.endResetModel()
+
+    ##################################
+    ##          Collection          ##
+    ##################################
+
+    def update(self, jobs_data: pd.DataFrame):
+        """Update the data model with newly collected job postings.
+
+        Parameters
+        ----------
+        jobs_data : pd.DataFrame
+            DataFrame containing raw collected job postings.
+        """
+        t_init = time.time()
+        self.beginResetModel()
+        if jobs_data.empty:
+            self.endResetModel()
+            self.logger.info("No new jobs collected.")
+            return
+        self._dynamic_df = jobs_data.copy()
+        n_init = len(self._dynamic_df)
+        # Convert raw html descriptions to markdown
+        self._dynamic_df["description"] = self._dynamic_df["description"].apply(
+            lambda html: self._converter.convert(html)
+                         if isinstance(html, str) and len(html) > 0 else html)
+        # Initialize 'is_favorite' column
+        self._dynamic_df["is_favorite"] = False
+        # Remove duplicate jobs from current collection
+        self._dynamic_df = self.drop_duplicate_jobs(self._dynamic_df)
+        # Remove jobs already in original data
+        self._dynamic_df = self.drop_known_jobs(self._dynamic_df, self._original_df)
+        # Count jobs found
+        n_found = len(self._dynamic_df)
+        self.logger.info(f"Removed {n_init - n_found} known and duplicate jobs.")
+        # Ensure date_posted is in YYYY-MM-DD format
+        self._dynamic_df["date_posted"] = pd.to_datetime(self._dynamic_df["date_posted"]).dt.strftime("%Y-%m-%d")
+        # Add to original data and update archive file
+        self._original_df = pd.concat([self._dynamic_df, self._original_df], ignore_index=True)
+        archive_path = self._arch_path / "jobs_data.csv"
+        self._original_df.to_csv(archive_path, index=False)
+        self.logger.info(f"Updated archive at '{archive_path}'.")
+        # Rebuild recent data and apply filters/sorting
+        self.build_active_data()
+        self.apply_filters()
+        self.apply_sort()
+        # Signal model reset complete
+        self.endResetModel()
+        self.logger.info(f"Collected {n_found} new jobs in {time.time() - t_init:.1f}s.")
+
+    ###################################
+    ## QAbstractTableModel Overrides ##
+    ###################################
 
     def set_visible_columns(self, columns: list[str]):
         """Set the visible columns in the data model.
@@ -228,7 +300,7 @@ class JobsDataModel(QAbstractTableModel):
         self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()) -> int:        # noqa: N802
-        return self._dyn_df.shape[0]
+        return self._dynamic_df.shape[0]
 
     def columnCount(self, parent=QModelIndex()) -> int:     # noqa: N802
         return len(self.columns)
@@ -242,14 +314,16 @@ class JobsDataModel(QAbstractTableModel):
                 col = self.columns[section]
                 return self._header_labels.get(col, col.replace("_", " ").title())
             elif orientation == Qt.Orientation.Vertical:
-                return str(self._dyn_df.index[section])
+                return str(self._dynamic_df.index[section])
         return None
 
     def data(self, index, role):
         if not index.isValid():
             return None
         col = self.columns[index.column()]
-        val = self._dyn_df[col].iloc[index.row()]
+        if col not in self._dynamic_df.columns:
+            return None
+        val = self._dynamic_df[col].iloc[index.row()]
         try:
             val = val.item()
         except AttributeError:
@@ -295,29 +369,37 @@ class JobsDataModel(QAbstractTableModel):
                 return True
         return None
 
-    def __apply_sort(self):
-        if self._sort_column is not None:
-            ascending = self._sort_order == Qt.SortOrder.AscendingOrder
-            self._df.sort_values(by=self._sort_column,
-                                 ascending=ascending,
-                                 inplace=True,
-                                 ignore_index=True)
-
     def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder):
         self._sort_column = self.columns[column]    # type: ignore
         self._sort_order = order
-        self.layoutAboutToBeChanged.emit()
-        self.__apply_sort()
-        self.layoutChanged.emit()
+        self.apply_sort()
 
-    def __apply_filters(self):
-        if self._filter_masks:
-            combined_mask = pd.Series(True, index=self._df.index)
-            for m in self._filter_masks.values():
-                combined_mask &= m
-            self._dyn_df = self._df[combined_mask].reset_index(drop=True)
+    ###################################
+    ##           Filtering           ##
+    ###################################
+
+    def build_active_data(self):
+        """Build the recent data DataFrame based on the specified number of days.
+
+        Parameters
+        ----------
+        days : int
+            Number of days to consider for recent job postings.
+        """
+        if self.display_favorites:
+            mask = self._original_df["is_favorite"] == True  # noqa: E712
         else:
-            self._dyn_df = self._df.copy()
+            date_cutoff = (dt.datetime.now() - dt.timedelta(self.active_days)).strftime("%Y-%m-%d")
+            mask = self._original_df["date_posted"] >= date_cutoff
+        self._active_df = self._original_df[mask].reset_index(drop=True)
+        self._active_df = self.build_derived_columns(self._active_df)
+        for col in ["company", "title"]:
+            self._col_len_thresh[col] = self.calc_col_len_thresh(self._active_df, col)
+        self._update_rank_order_score("site_score")
+        self._update_rank_order_score("location_score")
+        self._update_degree_scores()
+        self._update_keyword_scores()
+        self._dynamic_df = self._active_df.copy()
 
     def set_filter(self,
                     identifier: str,
@@ -339,324 +421,20 @@ class JobsDataModel(QAbstractTableModel):
         invert : bool, optional
             If True, invert the filter to exclude matching rows.
         """
-        self.beginResetModel()
-        mask = self.exists(column, expression)
-        if invert:
-            mask = ~mask
-        self._filter_masks[identifier] = mask
-        self.__apply_filters()
-        self.__apply_sort()
-        self.endResetModel()
+        self._filters[identifier] = (column, expression, invert)
 
-    def refresh_view(self):
-        """Refresh the dynamic view by reapplying filters and sorting."""
-        self.beginResetModel()
-        self.__apply_filters()
-        self.__apply_sort()
-        self.endResetModel()
+    def apply_filters(self):
+        """Apply all set filters to the dynamic DataFrame."""
+        if not self._dynamic_df.empty:
+            combined_mask = pd.Series(True, index=self._dynamic_df.index)
+            for col, expr, inv in self._filters.values():
+                mask = self.create_filter_mask(col, expr)
+                if inv:
+                    mask = ~mask
+                combined_mask &= mask
+            self._dynamic_df = self._dynamic_df[combined_mask].reset_index(drop=True)
 
-    def toggle_favorite(self, index: QModelIndex):
-        """Toggle the 'favorite' status of the job at the given index.
-
-        Parameters
-        ----------
-        index : QModelIndex
-            Index of the job posting to toggle favorite status for.
-        """
-        job_id = self._dyn_df["id"].iloc[index.row()]
-        if self._dyn_df.at[index.row(), "is_favorite"]:
-            # Remove from favorites
-            self._fav_df = self._fav_df[self._fav_df["id"] != job_id]
-            self._dyn_df.at[index.row(), "is_favorite"] = False
-        else:
-            # Add to favorites
-            job_row = self._dyn_df[self._dyn_df["id"] == job_id]
-            if not job_row.empty:
-                self._fav_df = pd.concat([self._fav_df, job_row], ignore_index=True)
-                self._dyn_df.at[index.row(), "is_favorite"] = True
-        # Save updated favorites
-        self.export_csv(path=self._fav_path, data=self._fav_df)
-        self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole,
-                                                Qt.ItemDataRole.EditRole])
-
-    def get_job_data(self, index: QModelIndex) -> dict:
-        """Get the job data as a dictionary for the given model index."""
-        data = self._dyn_df.iloc[index.row()].copy()
-        data.replace({pd.NA: None, np.nan: None}, inplace=True)
-        return data.to_dict()
-
-    def get_index_url(self, index: QModelIndex) -> str:
-        """Get the posting URL for the given model index."""
-        return self._dyn_df["job_url"].iloc[index.row()]
-
-    #################################
-    ##       Data Collection       ##
-    #################################
-
-    def __pre_load(self):
-        """Operations to be performed before loading data."""
-        if self._load_path == self._foobar_path:
-            # Clear out placeholder data
-            self._df = pd.DataFrame()
-            self._load_path = Path()
-        # Signal model reset
-        self.beginResetModel()
-
-    def __prep_data(self):
-        """Prepare data after loading or collection."""
-        if self._df.empty:
-            return
-        # Load favorites
-        self._df["is_favorite"] = False
-        if (self._fav_path / "jobs_data.csv").exists():
-            self._fav_df = pd.read_csv(self._fav_path / "jobs_data.csv")
-            if not self._fav_df.empty:
-                self._df["is_favorite"] = self._df["id"].isin(self._fav_df["id"].values)
-        # Remove escape characters from emphasis tags in descriptions
-        self._df["description"] = self._df["description"].apply(
-            lambda md: re.sub(r"\\*(_|\*)", r"\1", md) if isinstance(md, str) else md)
-        # Ensure date_posted is in YYYY-MM-DD format
-        self._df["date_posted"] = pd.to_datetime(self._df["date_posted"]).dt.strftime("%Y-%m-%d")
-        # Parse locations into city and state
-        self._df["city"], self._df["state"] = zip(*self._df["location"].map(parse_location))
-        # Add degree existence columns
-        has_degrees = self._df["description"].map(parse_degrees)
-        self._df["has_ba"], self._df["has_ma"], self._df["has_phd"] = zip(*has_degrees)
-
-    def __post_load(self):
-        """Operations to be performed after loading data."""
-        # Copy to dynamic DataFrame
-        self._dyn_df = self._df.copy()
-        if not self._df.empty:
-            # Apply any active filters and sorting criteria
-            self.__apply_filters()
-            self.__apply_sort()
-            # Compute dynamic string wrapping thresholds
-            for col in ["company", "title"]:
-                self._col_len_thresh[col] = self.__calc_col_len_thresh(col)
-        # Signal model reset complete
-        self.endResetModel()
-
-    @staticmethod
-    def __scrape_jobs_worker(queue: mp.Queue, kwargs: dict):
-        """Worker for calling scrape_jobs in a separate process."""
-        try:
-            jobs = scrape_jobs(**kwargs)
-            queue.put(jobs)
-        except Exception as e:
-            queue.put(e)
-
-    def collect(self,
-                site_name: str | list[str],
-                search_term: str,
-                job_type: str,
-                locations: list[str],
-                results_wanted: int,
-                proxy: str,
-                hours_old: int,
-                cancel_event: threading.Event | None = None):
-        """Collect job postings.
-
-        Parameters
-        ----------
-        site_name : str | list[str]
-            Job site name(s) to scrape (e.g., "LinkedIn", "Indeed").
-        search_term : str
-            Search term/expression to use for job scraping.
-        job_type : str
-            Job type to filter for (e.g., "fulltime", "parttime", "contract", etc.).
-        locations : list[str]
-            List of locations to search for jobs.
-        results_wanted : int
-            Number of job postings to collect.
-        proxy : str
-            Proxy server to use for scraping.
-        hours_old : int
-            Maximum age of job postings in hours.
-        cancel_event : threading.Event, optional
-            Event to signal cancellation of the collection process.
-
-        Returns
-        -------
-        int
-            Number of job postings collected.
-        """
-        # Set up cancellation check
-        if cancel_event is None:
-            cancel_check = lambda: False  # noqa: E731
-        else:
-            cancel_check = cancel_event.is_set
-        # Collect jobs for each location
-        n_init = len(self._df)
-        t_init = time.time()
-        self.__pre_load()
-        for location in locations:
-            if cancel_check():
-                self._logger.info(f"Job collection cancelled before location '{location}'.")
-                break
-            # Scrape jobs for this location and search terms
-            kwargs = dict(site_name=site_name,
-                          search_term=search_term,
-                          location=location,
-                          job_type=job_type,
-                          results_wanted=results_wanted,
-                          proxies=proxy,
-                          description_format="html",
-                          linkedin_fetch_description=True,
-                          hours_old=hours_old,
-                          enforce_annual_salary=False)
-            # Set up multiprocessing queue and process
-            q: mp.Queue = mp.Queue()
-            p = mp.Process(target=self.__scrape_jobs_worker, args=(q, kwargs))
-            p.start()
-            jobs = pd.DataFrame()
-            # Monitor process and queue
-            while True:
-                # Check for cancellation
-                if cancel_check():
-                    self._logger.info("Job collection cancelled: terminating worker process.")
-                    if p.is_alive():
-                        p.terminate()
-                        p.join()
-                    break
-                # Check for results
-                try:
-                    result = q.get(timeout=0.5)
-                    if isinstance(result, Exception):
-                        self._logger.warning(f"Collection worker raised an exception: {result}")
-                    else:
-                        jobs = result
-                    p.join()
-                    break
-                except queue.Empty:
-                    # No result yet; check if process is still alive
-                    if not p.is_alive():
-                        break
-            # Cancellation mid-scrape
-            if cancel_check():
-                break
-            # Skip if no jobs found
-            if jobs.empty:
-                self._logger.info(f"No jobs found for location '{location}'.")
-                continue
-            # Filter out jobs older than hours_old
-            datetime = pd.to_datetime(jobs["date_posted"])
-            cutoff = dt.datetime.now() - dt.timedelta(hours=hours_old)
-            cutoff = cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
-            jobs = jobs[datetime >= cutoff]
-            # Append to main DataFrame
-            self._df = pd.concat([self._df, jobs], ignore_index=True)
-            self._df.reset_index(drop=True, inplace=True)
-            self._modified = True
-        # Convert raw html descriptions to markdown
-        self._df["description"] = self._df["description"].apply(
-            lambda html: self._converter.convert(html)
-                         if isinstance(html, str) and len(html) > 0 else html)
-        # Prepare data
-        self.__prep_data()
-        self.drop_duplicate_jobs()
-        # Update dynamic view
-        self.__post_load()
-        self._logger.info(f"Collected {len(self._df) - n_init} new jobs in {time.time() - t_init:.1f}s.")
-
-    def load_data(self, source: Path | str):
-        """Load job data from a CSV file.
-
-        Parameters
-        ----------
-        source : Path | str
-            Data source to load from.
-            - *Path* : load data from the specified CSV file or directory.
-            - *"latest"* : load data from the most recent run.
-            - *"favorites"* : load data from the favorites data path.
-            - *"archive"* : load data from the archive data path.
-        """
-        if source == Path() or source == "":
-            return
-        if isinstance(source, str):
-            if source == "latest":
-                data_paths = get_data_sources()
-                source = data_paths[max(data_paths.keys())]
-            else:
-                source = Path(source)
-        if isinstance(source, Path):
-            if not source.is_absolute():
-                source = get_data_dir() / source
-            if source.is_dir():
-                source = source / "jobs_data.csv"
-        if not source.exists():
-            if get_data_dir() in source.parents:
-                source_str = str(source.relative_to(get_data_dir()))
-            else:
-                source_str = str(source)
-            self._logger.warning(f"Data source not found at {source_str.replace("/jobs_data.csv", "")}.")
-            return
-        # Load data
-        self.__pre_load()
-        self._df = pd.read_csv(source)
-        self.__prep_data()
-        self._load_path = source.parent
-        self._modified = False
-        self.__post_load()
-        if get_data_dir() in source.parents:
-            source_str = str(source.relative_to(get_data_dir()))
-        else:
-            source_str = str(source)
-        self._logger.info(f"Loaded {len(self._df)} jobs from {source_str.replace("/jobs_data.csv", "")}.")
-
-    def update(self, other, inplace: bool = True):
-        """Update this `JobsData` instance with another `JobsData` or DataFrame."""
-        if isinstance(other, JobsDataModel):
-            other_df = other._df
-        elif isinstance(other, pd.DataFrame):
-            other_df = other
-        else:
-            raise TypeError("Argument 'other' must be a JobsDataModel or DataFrame.")
-        jobs = self if inplace else self.clone()
-        jobs.__pre_load()
-        jobs._df = pd.concat([jobs._df, other_df], ignore_index=True)
-        jobs._df.reset_index(drop=True, inplace=True)
-        jobs.__prep_data()
-        jobs._modified = True
-        jobs.drop_duplicate_jobs()
-        jobs.__post_load()
-        if not inplace:
-            return jobs
-
-    def update_archive(self):
-        """Update the archive data with the current data."""
-        archive = JobsDataModel("archive")
-        archive._df = pd.concat([archive._df, self._df], ignore_index=True)
-        archive._df["description"] = archive._df["description"].apply(
-            lambda md: re.sub(r"\\*(_|\*)", r"\1", md) if isinstance(md, str) else md)
-        archive._df["date_posted"] = pd.to_datetime(archive._df["date_posted"]).dt.strftime("%Y-%m-%d")
-        archive.drop_duplicate_jobs()
-        archive.export_csv(get_data_dir() / "archive")
-
-    #################################
-    ##       Filtering Tools       ##
-    #################################
-
-    def drop_duplicate_jobs(self):
-        """Remove duplicate job postings. Keeps the first occurrence."""
-        n_init = len(self._df)
-        # Temporarily order jobs chronologically to keep oldest instances
-        self._df.sort_values(by="date_posted", ascending=True, inplace=True, ignore_index=True)
-        # Drop duplicates with the same job board identifier
-        self._df.drop_duplicates(subset=["id"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates pointing to the same direct job URL
-        self._df.drop_duplicates(subset=["job_url_direct"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates with the same company and title
-        self._df.drop_duplicates(subset=["company", "title"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates with the same title and description
-        self._df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
-        # Restore original order
-        self._df.sort_values(by="date_posted", ascending=False, inplace=True, ignore_index=True)
-        self._modified = True
-        self._logger.info(f"Removed {n_init - len(self._df)} duplicate job postings.")
-        return n_init - len(self._df)
-
-    def exists(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
+    def create_filter_mask(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
         """Create a boolean mask indicating which rows match the specified expression.
 
         Parameters
@@ -678,35 +456,35 @@ class JobsDataModel(QAbstractTableModel):
         mask : pd.Series
             Boolean mask indicating which rows match the expression.
         """
-        if column not in self._df.columns:
-            self._logger.warning(f"Column '{column}' not found in DataFrame.")
-            mask = pd.Series(False, index=self._df.index)
+        if column not in self._active_df.columns:
+            self.logger.warning(f"Column '{column}' not found in DataFrame.")
+            mask = pd.Series(False, index=self._active_df.index)
         elif callable(expression):
-            mask = pd.Series(expression(self._df[column]), index=self._df.index).astype(bool)
+            mask = pd.Series(expression(self._active_df[column]), index=self._active_df.index).astype(bool)
         elif isinstance(expression, pd.Series):
-            mask = expression.reindex(self._df.index).fillna(False).astype(bool)
+            mask = expression.reindex(self._active_df.index).fillna(False).astype(bool)
         elif isinstance(expression, (bool, int, float)):
-            mask = (self._df[column] == expression).fillna(False)
+            mask = (self._active_df[column] == expression).fillna(False)
         elif isinstance(expression, (list, tuple, set)):
             if all(isinstance(item, (bool, int, float)) for item in expression):
-                mask = self._df[column].isin(expression).fillna(False)
+                mask = self._active_df[column].isin(expression).fillna(False)
             elif all(isinstance(item, str) for item in expression):
                 pattern = build_regex(expression)   # type: ignore
-                mask = self._df[column].str.contains(pattern, case=False, na=False)
+                mask = self._active_df[column].str.contains(pattern, case=False, na=False)
             else:
-                self._logger.warning(f"Unsupported expression list types for column '{column}'.")
-                mask = pd.Series(False, index=self._df.index)
+                self.logger.warning(f"Unsupported expression list types for column '{column}'.")
+                mask = pd.Series(False, index=self._active_df.index)
         else:
             #Fallback: string patterns
             pattern = build_regex(expression)
-            mask = self._df[column].str.contains(pattern, case=False, na=False)
+            mask = self._active_df[column].str.contains(pattern, case=False, na=False)
         return mask
 
-    #################################
-    ##        Sorting Tools        ##
-    #################################
+    ###################################
+    ##            Sorting            ##
+    ###################################
 
-    def update_degree_score(self, degree_values: tuple[int, int, int]):
+    def set_degree_values(self, degree_values: tuple[int, int, int]):
         """Compute degree-based priority scores.
 
         Parameters
@@ -714,14 +492,9 @@ class JobsDataModel(QAbstractTableModel):
         degree_scores : tuple[int, int, int]
             Tuple of score adjustments for (bachelor, master, doctorate) degrees.
         """
-        score = pd.Series(0, index=self._df.index)
-        score += degree_values[0] * self._df["has_ba"].astype(int)
-        score += degree_values[1] * self._df["has_ma"].astype(int)
-        score += degree_values[2] * self._df["has_phd"].astype(int)
-        self._df["degree_score"] = score
-        self._dyn_df["degree_score"] = score
+        self._degree_values = degree_values
 
-    def update_keyword_score(self, keyword_score_map: dict[int, list[str]]):
+    def set_keyword_score_map(self, keyword_score_map: dict[int, list[str]]):
         """Compute keyword-based priority scores.
 
         Parameters
@@ -731,26 +504,12 @@ class JobsDataModel(QAbstractTableModel):
             Each keyword found in title or description adds the corresponding
             priority to the job posting's running score.
         """
-        score = pd.Series(0, index=self._df.index)
-        keywords = pd.Series([[] for _ in range(len(self._df))], index=self._df.index)
-        for priority, keywords_list in keyword_score_map.items():
-            for term in keywords_list:
-                mask = (self._df["title"].str.contains(term, case=False, na=False) |
-                        self._df["description"].str.contains(term, case=False, na=False))
-                score[mask] += priority
-                for idx in self._df.index[mask]:
-                    keywords[idx].append(term)
-        keywords = keywords.apply(lambda kws: [kw.replace("\\", "") for kw in kws])
-        self._df["keyword_score"] = score
-        self._df["keywords"] = keywords
-        self._dyn_df["keyword_score"] = score
-        self._dyn_df["keywords"] = keywords
-        self._col_len_thresh["keywords"] = self.__calc_col_len_thresh("keywords")
+        self._keyword_score_map = keyword_score_map
 
-    def update_rank_order_score(self,
-                         source_column: str,
-                         rank_order: list[str],
-                         target_column: str):
+    def set_rank_order(self,
+                       source_column: str,
+                       rank_order: list[str],
+                       target_column: str):
         """Compute priority scores based on specified rank order of column values.
 
         Parameters
@@ -770,54 +529,142 @@ class JobsDataModel(QAbstractTableModel):
         priority_map = {value: len(rank_order) - rank
                         for rank, value in enumerate(rank_order)}
         priority_map[""] = -1
-        scores = self._df[source_column].map(priority_map).fillna(0).astype(int)
-        self._df[target_column] = scores
-        self._dyn_df[target_column] = scores
+        self._rank_orders[target_column] = (source_column, priority_map)
 
-    def standard_ordering(self):
-        """Sort job postings hierarchically by date posted, location, degree, keywords, and site.
+    def apply_sort(self):
+        """Apply sorting to the dynamic DataFrame."""
+        cols = self.standard_order.copy()
+        ascending = [False] * len(cols)
+        if self._sort_column:
+            if self._sort_column in cols:
+                cols.remove(self._sort_column)
+            cols.insert(0, self._sort_column)
+            is_asc = self._sort_order == Qt.SortOrder.AscendingOrder
+            ascending = [is_asc] + [False] * (len(cols) - 1)
+        self._dynamic_df.sort_values(by=cols, ascending=ascending, inplace=True, ignore_index=True)
 
-        Assumes that `location_score`, `degree_score`,
-        `keyword_score`, and `site_score` columns exist.
+    def _update_degree_scores(self):
+        """Compute degree-based priority scores in the active DataFrame."""
+        score = pd.Series(0, index=self._active_df.index)
+        score += self._degree_values[0] * self._active_df["has_ba"].astype(int)
+        score += self._degree_values[1] * self._active_df["has_ma"].astype(int)
+        score += self._degree_values[2] * self._active_df["has_phd"].astype(int)
+        self._active_df["degree_score"] = score
+
+    def _update_keyword_scores(self):
+        """Compute keyword-based priority scores in the active DataFrame."""
+        score = pd.Series(0, index=self._active_df.index)
+        keywords = pd.Series([[] for _ in range(len(self._active_df))], index=self._active_df.index)
+        for priority, keywords_list in self._keyword_score_map.items():
+            for term in keywords_list:
+                mask = (self._active_df["title"].str.contains(term, case=False, na=False) |
+                        self._active_df["description"].str.contains(term, case=False, na=False))
+                score[mask] += priority
+                for idx in self._active_df.index[mask]:
+                    keywords[idx].append(term)
+        keywords = keywords.apply(lambda kws: [kw.replace("\\", "") for kw in kws])
+        self._active_df["keyword_score"] = score
+        self._active_df["keywords"] = keywords
+        self._col_len_thresh["keywords"] = self.calc_col_len_thresh(self._active_df, "keywords")
+
+    def _update_rank_order_score(self, target_column: str):
+        """Compute rank order-based priority scores in the active DataFrame.
+
+        Parameters
+        ----------
+        target_column : str
+            Name of the target column to update scores for.
         """
-        self._df["qualification_score"] = (self._df["degree_score"] + self._df["keyword_score"])
-        self._df.sort_values(by=["date_posted", "location_score",
-                                 "qualification_score", "site_score"],
-                             ascending=False, inplace=True, ignore_index=True)
-        self._df.drop(columns=["qualification_score"], inplace=True)
+        source_column, priority_map = self._rank_orders[target_column]
+        scores = self._active_df[source_column].map(priority_map).fillna(0).astype(int)
+        self._active_df[target_column] = scores
+
+    ##################################
+    ##      Favorites Handling      ##
+    ##################################
+
+    def toggle_favorite(self, index: QModelIndex):
+        """Toggle the 'favorite' status of the job at the given index.
+
+        Parameters
+        ----------
+        index : QModelIndex
+            Index of the job posting to toggle favorite status for.
+        """
+        row = index.row()
+        row_id = self._dynamic_df.at[row, "id"]
+        id_mask = self._original_df["id"] == row_id
+        is_fav = self._dynamic_df.at[row, "is_favorite"]
+        self._original_df.loc[id_mask, "is_favorite"] = not is_fav
+        self._dynamic_df.at[row, "is_favorite"] = not is_fav
+        self.dataChanged.emit(index, index, [Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole])
 
     ###############################
     ##         Utilities         ##
     ###############################
 
-    def clone(self) -> "JobsDataModel":
-        """Create a copy of this JobsDataModel instance."""
-        new = JobsDataModel(data=self._df.copy())
-        new._new_path = self._new_path
-        new._load_path = self._load_path
-        new._modified = self._modified
-        new.columns = list(self.columns)
-        new._col_len_thresh = dict(self._col_len_thresh)
-        new._header_labels = dict(self._header_labels)
-        new._filter_masks = dict(self._filter_masks)
-        new._sort_column = self._sort_column
-        new._sort_order = self._sort_order
-        return new
+    def get_job_data(self, index: QModelIndex) -> dict:
+        """Get the job data as a dictionary for the given model index."""
+        data = self._dynamic_df.iloc[index.row()].copy()
+        data.replace({pd.NA: None, np.nan: None}, inplace=True)
+        return data.to_dict()
 
-    def __get_new_path(self):
-        """Generate a new output path based on the current date and time."""
-        now = dt.datetime.now()
-        date = now.strftime("%Y%m%d")
-        time = now.strftime("%H%M")
-        self._new_path = get_data_dir() / date / time
+    @staticmethod
+    def drop_duplicate_jobs(df: pd.DataFrame) -> pd.DataFrame:
+        """Remove duplicate job postings. Keeps the first occurrence."""
+        # Temporarily order jobs chronologically to keep oldest instances
+        df.sort_values(by="date_posted", ascending=True, inplace=True, ignore_index=True)
+        # Drop duplicates with the same job board identifier
+        df.drop_duplicates(subset=["id"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates pointing to the same direct job URL
+        df.drop_duplicates(subset=["job_url_direct"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates with the same company and title
+        df.drop_duplicates(subset=["company", "title"], keep="first", inplace=True, ignore_index=True)
+        # Drop duplicates with the same title and description
+        df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
+        # Restore original order
+        df.sort_values(by="date_posted", ascending=False, inplace=True, ignore_index=True)
+        return df
 
-    def __calc_col_len_thresh(self, col: str, method: str = "iqr") -> int:
+    @staticmethod
+    def drop_known_jobs(df: pd.DataFrame, parent_df: pd.DataFrame) -> pd.DataFrame:
+        """Remove job postings that already exist in the parent DataFrame."""
+        # Find duplicates with the same job board identifier
+        dup_id = pd.merge(df, parent_df, on="id", how="inner").index
+        # Find duplicates pointing to the same direct job URL
+        dup_url = pd.merge(df, parent_df, on="job_url_direct", how="inner").index
+        # Find duplicates with the same company and title
+        dup_company = pd.merge(df, parent_df, on=["company", "title"], how="inner").index
+        # Find duplicates with the same title and description
+        dup_description = pd.merge(df, parent_df, on=["title", "description"], how="inner").index
+        # Drop identified duplicates
+        dup_rows = dup_id.union(dup_url).union(dup_company).union(dup_description)
+        df.drop(index=dup_rows, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        return df
+
+    @staticmethod
+    def build_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
+        """Build derived columns in the DataFrame."""
+        if df.empty:
+            return df
+        # Parse locations into city and state
+        df["city"], df["state"] = zip(*df["location"].map(parse_location))
+        # Add degree existence columns
+        has_degrees = df["description"].map(parse_degrees)
+        df["has_ba"], df["has_ma"], df["has_phd"] = zip(*has_degrees)
+        return df
+
+    @staticmethod
+    def calc_col_len_thresh(df: pd.DataFrame, col: str, method: str = "iqr") -> int:
         """Calculate string length threshold for wrapping long text in the specified column."""
-        if isinstance(self._df[col].iloc[0], list):
-            item_len = self._df[col].apply(
+        if len(df[col]) == 0:
+            return 80
+        if isinstance(df[col].iloc[0], list):
+            item_len = df[col].apply(
                 lambda strings: sum(len(str(v)) for v in strings) + (2 * (len(strings) - 1)))
         else:
-            item_len = self._df[col].str.len()
+            item_len = df[col].str.len()
         if sum(item_len > 80) == 0:
             thresh = 80
         elif method == "iqr":
@@ -830,122 +677,3 @@ class JobsDataModel(QAbstractTableModel):
         else:
             thresh = 80
         return min(thresh, 80)
-
-    ################################
-    ##       Data Exporting       ##
-    ################################
-
-    def __validate_path(self, path: Path|None, file_name: str) -> Path:
-        """Validate and return output directory path.
-
-        Parameters
-        ----------
-        path : Path|None
-            Output directory path.
-        file_name : str
-            Base output file name.
-
-        Returns
-        -------
-        Path
-            Validated output directory path.
-        """
-        name, extension = file_name.rsplit(".", 1)
-        # Determine output directory path
-        if path is None:
-            path = self.path
-        elif path.suffix == f".{extension}":
-            self._logger.warning("Expected directory path, got file path: "
-                                    f"{path}. Using parent directory instead.")
-            path = path.parent
-        # Ensure output directory exists
-        os.makedirs(path, exist_ok=True)
-        # Determine output file path
-        file = path / file_name
-        # Make sure we don't overwrite existing HTML results
-        if extension == "html":
-            i = 0
-            while os.path.exists(file):
-                i += 1
-                file = path / f"{name}_{i}.{extension}"
-        return file
-
-    def export_csv(self,
-                   path: Path|None = None,
-                   data: pd.DataFrame | None = None,
-                   drop_derived: bool = True) -> Path:
-        """Save collected job postings to CSV file.
-
-        Parameters
-        ----------
-        path : Path, optional
-            Output directory to save data; if empty, uses derived path.
-        data : pd.DataFrame, optional
-            DataFrame to save; if None, uses internal DataFrame.
-        drop_derived : bool, optional
-            Whether to drop derived columns. That is, columns
-            resulting from transformations of the original data.
-
-        Returns
-        -------
-        Path
-            Path to the saved CSV file.
-        """
-        # Validate output path
-        file = self.__validate_path(path, "jobs_data.csv")
-        # Prepare DataFrame for saving
-        data = self._df.copy() if data is None else data.copy()
-        if drop_derived:
-            derived_cols = [col for col in data.columns if col not in desired_order]
-            data.drop(columns=derived_cols, inplace=True)
-        # Save DataFrame to CSV
-        data.to_csv(file, index=False)
-        if get_data_dir() in file.parents:
-            file_str = str(file.relative_to(get_data_dir()))
-        else:
-            file_str = str(file)
-        self._logger.info(f"Saved {len(data)} jobs to {file_str.replace('/jobs_data.csv', '')}.")
-        return file
-
-    def export_html(self,
-               headers: dict[str, str] = {
-                   "date_posted": "Date",
-                   "state": "State",
-                   "company": "Company",
-                   "title": "Title",
-                   "has_ba": "BS",
-                   "has_ma": "MS",
-                   "has_phd": "PhD",
-                   "job_url": "URL"},
-               keys: dict[str, str] = {},
-               path: Path|None = None) -> Path:
-        """Export DataFrame to a nicely formatted HTML file.
-
-        Parameters
-        ----------
-        headers : dict[str, str]
-            Mapping of column names to their display headers.
-        keys : dict[str, str]
-            Mapping of column names to associated columns used as sort keys.
-        path : Path, optional
-            Output directory to save HTML file; if empty, uses derived path.
-
-        Returns
-        -------
-        Path
-            Path to the exported HTML file.
-        """
-        # Build HTML string from DataFrame
-        builder = HTMLBuilder(self._df)
-        html_str = builder.build_html(headers, keys)
-        # Validate output path
-        file = self.__validate_path(path, "jobs_data.html")
-        # Save HTML string to file
-        with open(file, "w", encoding="utf-8") as f:
-            f.write(html_str)
-        if get_data_dir() in file.parents:
-            file_str = file.relative_to(get_data_dir())
-        else:
-            file_str = file
-        self._logger.info(f"Exported {len(self._df)} jobs to {file_str}")
-        return file
