@@ -16,19 +16,13 @@ LO_TT = """Define the order of preferred job locations.
 
 Jobs located in higher-priority locations will receive better sorting values."""
 
-HE_TT = """Terms whose presence in job listings will significantly
+PT_TT = """Terms whose presence in job listings will
 adjust sorting values to favor those listings."""
 
-ME_TT = """Terms whose presence in job listings will moderately
-adjust sorting values to favor those listings."""
-
-LE_TT = """Terms whose presence in job listings will slightly
-adjust sorting values to favor those listings."""
-
-NE_TT = """Terms whose presence in job listings will not adjust
+UT_TT = """Terms whose presence in job listings will not adjust
 sorting values. These terms are tracked for reference only."""
 
-DE_TT = """Terms whose presence in job listings will decrease
+DT_TT = """Terms whose presence in job listings will decrease
 sorting values to disfavor those listings."""
 
 
@@ -181,23 +175,35 @@ class SortPage(QWidget):
         defaults["location_order_selected"] = []
         defaults["location_order_available"] = available
 
-        # Term emphasis selections
-        levels = {3: ("High Emphasis Terms (+3)", HE_TT),
-                  2: ("Medium Emphasis Terms (+2)", ME_TT),
-                  1: ("Low Emphasis Terms (+1)", LE_TT),
-                  0: ("Unemphasized Terms (+0)", NE_TT),
-                  -1: ("Deemphasized Terms (-1)", DE_TT)}
-        self.te_selectors: dict[int, QChipSelect] = {}
-        for value, (label, tooltip) in levels.items():
-            te_layout = QVBoxLayout()
-            te_layout.setSpacing(0)
-            te_layout.addWidget(QHeader(label, tooltip=tooltip))
-            selector = QChipSelect()
-            self.te_selectors[value] = selector
-            te_layout.addWidget(selector)
-            self.layout().addLayout(te_layout)
-            defaults[f"terms_selected_{str(value)}"] = []
-            defaults[f"terms_available_{str(value)}"] = []
+        # Prioritized terms selection
+        pt_layout = QVBoxLayout()
+        pt_layout.setSpacing(0)
+        pt_layout.addWidget(QHeader("Prioritized Terms", tooltip=PT_TT))
+        self.pt_selector = QChipSelect()
+        pt_layout.addWidget(self.pt_selector)
+        self.layout().addLayout(pt_layout)
+        defaults["prioritized_terms_selected"] = []
+        defaults["prioritized_terms_available"] = []
+
+        # Unprioritized terms selection
+        ut_layout = QVBoxLayout()
+        ut_layout.setSpacing(0)
+        ut_layout.addWidget(QHeader("Unprioritized Terms", tooltip=UT_TT))
+        self.ut_selector = QChipSelect()
+        ut_layout.addWidget(self.ut_selector)
+        self.layout().addLayout(ut_layout)
+        defaults["unprioritized_terms_selected"] = []
+        defaults["unprioritized_terms_available"] = []
+
+        # Deprioritized terms selection
+        dt_layout = QVBoxLayout()
+        dt_layout.setSpacing(0)
+        dt_layout.addWidget(QHeader("Deprioritized Terms", tooltip=DT_TT))
+        self.dt_selector = QChipSelect()
+        dt_layout.addWidget(self.dt_selector)
+        self.layout().addLayout(dt_layout)
+        defaults["deprioritized_terms_selected"] = []
+        defaults["deprioritized_terms_available"] = []
 
         # Push content to top
         self.layout().addStretch()
@@ -212,11 +218,18 @@ class SortPage(QWidget):
             lambda sel: self._update_config("location_order_selected", sel))
         self.lo_selector.availableChanged.connect(
             lambda avl: self._update_config("location_order_available", avl))
-        for value, selector in self.te_selectors.items():
-            selector.selectionChanged.connect(
-                lambda sel, v=value: self._update_config(f"terms_selected_{str(v)}", sel))
-            selector.availableChanged.connect(
-                lambda avl, v=value: self._update_config(f"terms_available_{str(v)}", avl))
+        self.pt_selector.selectionChanged.connect(
+            lambda sel: self._update_config("prioritized_terms_selected", sel))
+        self.pt_selector.availableChanged.connect(
+            lambda avl: self._update_config("prioritized_terms_available", avl))
+        self.ut_selector.selectionChanged.connect(
+            lambda sel: self._update_config("unprioritized_terms_selected", sel))
+        self.ut_selector.availableChanged.connect(
+            lambda avl: self._update_config("unprioritized_terms_available", avl))
+        self.dt_selector.selectionChanged.connect(
+            lambda sel: self._update_config("deprioritized_terms_selected", sel))
+        self.dt_selector.availableChanged.connect(
+            lambda avl: self._update_config("deprioritized_terms_available", avl))
 
         # Connect config model to view updates
         self._config_model.dataChanged.connect(self._on_config_changed)
@@ -247,11 +260,26 @@ class SortPage(QWidget):
         if val is not None and val != self.lo_selector.get_selected():
             self.lo_selector.set_selected(val)
 
-        # Term emphasis selectors
-        for value, selector in self.te_selectors.items():
-            val = self._config_model.get_value(f"terms_available_{str(value)}", top_left)
-            if val is not None and val != selector.get_available():
-                selector.set_available(val)
-            val = self._config_model.get_value(f"terms_selected_{str(value)}", top_left)
-            if val is not None and val != selector.get_selected():
-                selector.set_selected(val)
+        # Prioritized terms
+        val = self._config_model.get_value("prioritized_terms_available", top_left)
+        if val is not None and val != self.pt_selector.get_available():
+            self.pt_selector.set_available(val)
+        val = self._config_model.get_value("prioritized_terms_selected", top_left)
+        if val is not None and val != self.pt_selector.get_selected():
+            self.pt_selector.set_selected(val)
+
+        # Unprioritized terms
+        val = self._config_model.get_value("unprioritized_terms_available", top_left)
+        if val is not None and val != self.ut_selector.get_available():
+            self.ut_selector.set_available(val)
+        val = self._config_model.get_value("unprioritized_terms_selected", top_left)
+        if val is not None and val != self.ut_selector.get_selected():
+            self.ut_selector.set_selected(val)
+
+        # Deprioritized terms
+        val = self._config_model.get_value("deprioritized_terms_available", top_left)
+        if val is not None and val != self.dt_selector.get_available():
+            self.dt_selector.set_available(val)
+        val = self._config_model.get_value("deprioritized_terms_selected", top_left)
+        if val is not None and val != self.dt_selector.get_selected():
+            self.dt_selector.set_selected(val)

@@ -121,28 +121,31 @@ class JobsDataModel(QAbstractTableModel):
 
     def init_config(self):
         """Initialize data model with current config settings."""
-        work_models_val = [wm.upper() == "REMOTE" for wm in self._config_model.get_value("work_models")]
-        self.set_filter("work_models", "is_remote", work_models_val)
-        job_types_val = self._config_model.get_value("job_types")
-        self.set_filter("job_types", "job_type", job_types_val)
-        title_exclude_val = self._config_model.get_value("title_exclude_selected")
-        self.set_filter("title_exclude", "title", title_exclude_val, invert=True)
-        title_require_val = self._config_model.get_value("title_require_selected")
-        self.set_filter("title_require", "title", title_require_val)
-        descr_exclude_val = self._config_model.get_value("descr_exclude_selected")
-        self.set_filter("descr_exclude", "description", descr_exclude_val, invert=True)
-        descr_require_val = self._config_model.get_value("descr_require_selected")
-        self.set_filter("descr_require", "description", descr_require_val)
+        work_models = [wm.upper() == "REMOTE" for wm in self._config_model.get_value("work_models")]
+        self.set_filter("work_models", "is_remote", work_models)
+        job_types = self._config_model.get_value("job_types")
+        self.set_filter("job_types", "job_type", job_types)
+        title_exclude = self._config_model.get_value("title_exclude_selected")
+        self.set_filter("title_exclude", "title", title_exclude, invert=True)
+        title_require = self._config_model.get_value("title_require_selected")
+        self.set_filter("title_require", "title", title_require)
+        descr_exclude = self._config_model.get_value("descr_exclude_selected")
+        self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
+        descr_require = self._config_model.get_value("descr_require_selected")
+        self.set_filter("descr_require", "description", descr_require)
 
-        sites_selected_val = self._config_model.get_value("sites_selected")
-        self.set_rank_order("site", sites_selected_val, "site_score")
-        degree_values_val = self._config_model.get_value("degree_values")
-        self.set_degree_values(degree_values_val)
-        location_order_val = self._config_model.get_value("location_order_selected")
-        self.set_rank_order("state", location_order_val, "location_score")
-        kw_keys = [key for key, _ in self._config_model.idcs.items() if key.startswith("terms_selected_")]
-        keyword_score_map = {int(key.split("_")[-1]): self._config_model.get_value(key) for key in kw_keys}
-        self.set_keyword_score_map(keyword_score_map)
+        sites_selected = self._config_model.get_value("sites_selected")
+        self.set_rank_order("site", sites_selected, "site_score")
+        degree_values = self._config_model.get_value("degree_values")
+        self.set_degree_values(degree_values)
+        location_order = self._config_model.get_value("location_order_selected")
+        self.set_rank_order("state", location_order, "location_score")
+        prioritized_terms = self._config_model.get_value("prioritized_terms_selected")
+        self.set_keyword_scores(prioritized_terms, score=1)
+        unprioritized_terms = self._config_model.get_value("unprioritized_terms_selected")
+        self.set_keyword_scores(unprioritized_terms, score=0)
+        deprioritized_terms = self._config_model.get_value("deprioritized_terms_selected")
+        self.set_keyword_scores(deprioritized_terms, score=-1)
 
         self.display_favorites = self._config_model.get_value("display_favorites")
         self.active_days = self._config_model.get_value("max_days_old")
@@ -194,12 +197,15 @@ class JobsDataModel(QAbstractTableModel):
         val = self._config_model.get_value("location_order_selected", top_left)
         if val is not None:
             self.set_rank_order("state", val, "location_score")
-        kw_keys = [key for key, _ in self._config_model.idcs.items() if key.startswith("keyword_values_")]
-        kw_val_map = {}
-        for key in kw_keys:
-            val = self._config_model.get_value(key, top_left)
-            if val is not None:
-                kw_val_map[int(key.split("_")[-1])] = val
+        val = self._config_model.get_value("prioritized_terms_selected", top_left)
+        if val is not None:
+            self.set_keyword_scores(val, score=1)
+        val = self._config_model.get_value("unprioritized_terms_selected", top_left)
+        if val is not None:
+            self.set_keyword_scores(val, score=0)
+        val = self._config_model.get_value("deprioritized_terms_selected", top_left)
+        if val is not None:
+            self.set_keyword_scores(val, score=-1)
 
         # Display favorites setting
         display_favorites_changed = False
@@ -494,17 +500,17 @@ class JobsDataModel(QAbstractTableModel):
         """
         self._degree_values = degree_values
 
-    def set_keyword_score_map(self, keyword_score_map: dict[int, list[str]]):
-        """Compute keyword-based priority scores.
+    def set_keyword_scores(self, keywords: list[str], score: int):
+        """Set keyword-based priority scores.
 
         Parameters
         ----------
-        keyword_score_map : dict[int, list[str]]
-            Dictionary mapping integer priorities to lists of keywords.
-            Each keyword found in title or description adds the corresponding
-            priority to the job posting's running score.
+        keywords : list[str]
+            List of keywords to search for in job title and description.
+        score : int
+            Score adjustment to apply for each matching keyword.
         """
-        self._keyword_score_map = keyword_score_map
+        self._keyword_score_map[score] = keywords
 
     def set_rank_order(self,
                        source_column: str,
