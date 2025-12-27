@@ -148,7 +148,7 @@ class JobsDataModel(QAbstractTableModel):
         self.set_keyword_scores(deprioritized_terms, score=-1)
 
         self.display_favorites = self._config_model.get_value("display_favorites")
-        self.active_days = self._config_model.get_value("max_days_old")
+        self.active_days = self._config_model.get_value("max_age_days")
 
         self.beginResetModel()
         self.build_active_data()
@@ -156,38 +156,44 @@ class JobsDataModel(QAbstractTableModel):
         self.apply_sort()
         self.endResetModel()
 
+    def update_filters(self):
+        """Update data model filters from current config settings."""
+        work_models = [wm.upper() == "REMOTE" for wm in self._config_model.get_value("work_models")]
+        self.set_filter("work_models", "is_remote", work_models)
+        job_types = self._config_model.get_value("job_types")
+        self.set_filter("job_types", "job_type", job_types)
+        title_exclude = self._config_model.get_value("title_exclude_selected")
+        self.set_filter("title_exclude", "title", title_exclude, invert=True)
+        title_require = self._config_model.get_value("title_require_selected")
+        self.set_filter("title_require", "title", title_require)
+        descr_exclude = self._config_model.get_value("descr_exclude_selected")
+        self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
+        descr_require = self._config_model.get_value("descr_require_selected")
+        self.set_filter("descr_require", "description", descr_require)
+
+        rebuild_active = False
+        # Recent days filter
+        recent_days = self._config_model.get_value("max_age_days")
+        if recent_days != self.active_days:
+            self.active_days = recent_days
+            rebuild_active = True
+        # Favorites filter
+        display_favorites = self._config_model.get_value("display_favorites")
+        if display_favorites != self.display_favorites:
+            self.display_favorites = display_favorites
+            rebuild_active = True
+
+        # Apply changes to data model
+        self.beginResetModel()
+        if rebuild_active:
+            self.build_active_data()
+        self.apply_filters()
+        self.apply_sort()
+        self.endResetModel()
+
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
-        """Update data model when config model changes."""
-        # Filter settings
-        filter_changed = False
-        val = self._config_model.get_value("work_models", top_left)
-        if val is not None:
-            val = [wm.upper() == "remote" for wm in val]
-            self.set_filter("work_models", "is_remote", val)
-            filter_changed = True
-        val = self._config_model.get_value("job_types", top_left)
-        if val is not None:
-            self.set_filter("job_types", "job_type", val)
-            filter_changed = True
-        val = self._config_model.get_value("title_exclude_selected", top_left)
-        if val is not None:
-            self.set_filter("title_exclude", "title", val, invert=True)
-            filter_changed = True
-        val = self._config_model.get_value("title_require_selected", top_left)
-        if val is not None:
-            self.set_filter("title_require", "title", val)
-            filter_changed = True
-        val = self._config_model.get_value("descr_exclude_selected", top_left)
-        if val is not None:
-            self.set_filter("descr_exclude", "description", val, invert=True)
-            filter_changed = True
-        val = self._config_model.get_value("descr_require_selected", top_left)
-        if val is not None:
-            self.set_filter("descr_require", "description", val)
-            filter_changed = True
-
-        # Sort settings
+        """Update data model sorting when config model changes."""
         val = self._config_model.get_value("sites_selected", top_left)
         if val is not None:
             self.set_rank_order("site", val, "site_score")
@@ -207,25 +213,8 @@ class JobsDataModel(QAbstractTableModel):
         if val is not None:
             self.set_keyword_scores(val, score=-1)
 
-        # Display favorites setting
-        display_favorites_changed = False
-        display_favorites = self._config_model.get_value("display_favorites", top_left)
-        if display_favorites is not None and display_favorites != self.display_favorites:
-            self.display_favorites = display_favorites
-            display_favorites_changed = True
-
-        # Recent days setting
-        recent_days_changed = False
-        val = self._config_model.get_value("max_days_old", top_left)
-        if val is not None and val != self.active_days:
-            self.active_days = val
-            recent_days_changed = True
-
         # Apply changes to data model
         self.beginResetModel()
-        if filter_changed or recent_days_changed or display_favorites_changed:
-            self.build_active_data()
-            self.apply_filters()
         self.apply_sort()
         self.endResetModel()
 

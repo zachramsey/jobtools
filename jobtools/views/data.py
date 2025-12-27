@@ -1,25 +1,18 @@
-from PySide6.QtCore import QModelIndex, Qt, QUrl, Slot
+from PySide6.QtCore import QModelIndex, QSize, Qt, QUrl, Slot
 from PySide6.QtGui import QCursor, QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
     QHeaderView,
     QPushButton,
-    QSpinBox,
     QTableView,
     QVBoxLayout,
     QWidget,
 )
 
 from ..models import ConfigModel, JobsDataModel
-from ..utils import ThemeColor, blend_colors
+from ..utils import ThemeColor, blend_colors, get_icon
 from .details import CompanyDetails, JobDetails
-from .widgets import QHeader
-
-TT_MD = """Maximum age of job postings to display.
-
-Jobs older than this value will be filtered out.
-"""
 
 
 class HoverTableView(QTableView):
@@ -69,20 +62,19 @@ class DataPage(QWidget):
 
         # Controls layout
         data_control_layout = QHBoxLayout()
+
+        self.data_refresh = QPushButton()
+        self.data_refresh.setIcon(get_icon("refresh"))
+        self.data_refresh.setIconSize(QSize(24, 24))
+        self.data_refresh.setStyleSheet("border: none; padding: 5px;")
+        self.data_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.data_refresh.setToolTip("Refresh Data Sources")
+        self.data_refresh.clicked.connect(self._data_model.update_filters)
+        data_control_layout.addWidget(self.data_refresh)
+
         self.toggle_favorites = QCheckBox("Favorites")
         data_control_layout.addWidget(self.toggle_favorites)
         defaults["display_favorites"] = False
-        data_control_layout.addSpacing(100)
-        max_days_label = QHeader("Max Age:", tooltip=TT_MD)
-        data_control_layout.addWidget(max_days_label)
-        self.max_days_old = QSpinBox()
-        self.max_days_old.setMinimum(1)
-        self.max_days_old.setSuffix(" days")
-        data_control_layout.addWidget(self.max_days_old)
-        defaults["max_days_old"] = 7
-        self.apply_max_days_btn = QPushButton("Apply")
-        self.apply_max_days_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        data_control_layout.addWidget(self.apply_max_days_btn)
         data_control_layout.addStretch()
         self.layout().addLayout(data_control_layout)
 
@@ -112,8 +104,6 @@ class DataPage(QWidget):
         self._config_model.register_page("data", defaults)
 
         # Connect view to config model
-        self.apply_max_days_btn.clicked.connect(
-            lambda: self._update_config("max_days_old", self.max_days_old.value()))
         self.toggle_favorites.stateChanged.connect(
             lambda state: self._update_config("display_favorites", bool(state)))
 
@@ -151,11 +141,6 @@ class DataPage(QWidget):
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update data model when config model changes."""
-        # Recent days setting
-        val = self._config_model.get_value("max_days_old", top_left)
-        if val is not None and val != self.max_days_old.value():
-            self.max_days_old.setValue(val)
-
         # Favorites filter
         val = self._config_model.get_value("display_favorites", top_left)
         if val is not None and val != self.toggle_favorites.isChecked():

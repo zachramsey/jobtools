@@ -1,9 +1,12 @@
 from jobspy.model import JobType  # type: ignore
 from PySide6.QtCore import QModelIndex, Qt, Slot
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QSpinBox, QVBoxLayout, QWidget
 
 from ..models import ConfigModel
 from .widgets import QCheckBoxSelect, QChipSelect, QHeader
+
+MA_TT = """Maximum age of job postings to display.\n
+Jobs older than this value will be filtered out."""
 
 WM_TT = """Select which work models to include in results.\n
 Remote - jobs that can be done entirely remotely.
@@ -42,6 +45,16 @@ class FilterPage(QWidget):
 
         self.setLayout(QVBoxLayout(self))
         self.layout().setSpacing(20)
+
+        # Maximum age selector
+        ma_layout = QHBoxLayout()
+        max_days_label = QHeader("Maximum Posting Age:", tooltip=MA_TT)
+        ma_layout.addWidget(max_days_label)
+        self.ma_selector = QSpinBox(suffix=" days", minimum=1)
+        ma_layout.addWidget(self.ma_selector)
+        ma_layout.addStretch()
+        self.layout().addLayout(ma_layout)
+        defaults["max_age_days"] = 1
 
         # Work model selector
         wm_layout = QHBoxLayout()
@@ -114,6 +127,8 @@ class FilterPage(QWidget):
         self._config_model.register_page("filter", defaults)
 
         # Connect view to config model
+        self.ma_selector.valueChanged.connect(
+            lambda val: self._update_config("max_age_days", val))
         self.wm_selector.selectionChanged.connect(
             lambda sel: self._update_config("work_models", sel))
         self.jt_selector.selectionChanged.connect(
@@ -151,6 +166,11 @@ class FilterPage(QWidget):
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when model data changes."""
+        # Maximum age selector
+        val = self._config_model.get_value("max_age_days", top_left)
+        if val is not None and val != self.ma_selector.value():
+            self.ma_selector.setValue(val)
+
         # Work model selector
         val = self._config_model.get_value("work_models", top_left)
         if val is not None:
