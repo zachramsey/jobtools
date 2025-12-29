@@ -40,11 +40,11 @@ Accepts single words, multi-word phrases, and regular expressions."""
 class FilterPage(QWidget):
     def __init__(self, config_model: ConfigModel):
         super().__init__()
-        self._config_model = config_model
+        self._cfg_model = config_model
         defaults: dict = {}
 
         self.setLayout(QVBoxLayout(self))
-        self.layout().setSpacing(20)
+        self.layout().setSpacing(10)
 
         # Maximum age selector
         ma_layout = QHBoxLayout()
@@ -124,7 +124,7 @@ class FilterPage(QWidget):
         self.layout().addStretch()
 
         # Register page with config model
-        self._config_model.register_page("filter", defaults)
+        self._cfg_model.register_page("filter", defaults)
 
         # Connect view to config model
         self.ma_selector.valueChanged.connect(
@@ -151,7 +151,7 @@ class FilterPage(QWidget):
             lambda avl: self._update_config("descr_require_available", avl))
 
         # Connect config model to view updates
-        self._config_model.dataChanged.connect(self._on_config_changed)
+        self._cfg_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
         """Override layout to remove type-checking errors."""
@@ -159,62 +159,62 @@ class FilterPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update model data from view changes."""
-        idx = self._config_model.idcs.get(key)
+        idx = self._cfg_model.idcs.get(key)
         if idx is not None:
-            self._config_model.setData(idx, value, Qt.ItemDataRole.EditRole)
+            self._cfg_model.setData(idx, value, Qt.ItemDataRole.EditRole)
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when model data changes."""
         # Maximum age selector
-        val = self._config_model.get_value("max_age_days", top_left)
+        val = self._cfg_model.get_value("max_age_days", top_left)
         if val is not None and val != self.ma_selector.value():
             self.ma_selector.setValue(val)
 
         # Work model selector
-        val = self._config_model.get_value("work_models", top_left)
+        val = self._cfg_model.get_value("work_models", top_left)
         if val is not None:
             if val != self.wm_selector.get_selected():
                 self.wm_selector.set_selected(val)
 
         # Job type selector
-        val = self._config_model.get_value("job_types", top_left)
+        val = self._cfg_model.get_value("job_types", top_left)
         if val is not None:
             if val != self.jt_selector.get_selected():
                 self.jt_selector.set_selected(val)
 
         # Title exclude editor
-        val = self._config_model.get_value("title_exclude_available", top_left)
+        val = self._cfg_model.get_value("title_exclude_available", top_left)
         if val is not None and val != self.te_editor.get_available():
             self.te_editor.set_available(val)
-        val = self._config_model.get_value("title_exclude_selected", top_left)
+        val = self._cfg_model.get_value("title_exclude_selected", top_left)
         if val is not None:
             if val != self.te_editor.get_selected():
                 self.te_editor.set_selected(val)
 
         # Title require editor
-        val = self._config_model.get_value("title_require_available", top_left)
+        val = self._cfg_model.get_value("title_require_available", top_left)
         if val is not None and val != self.tr_editor.get_available():
             self.tr_editor.set_available(val)
-        val = self._config_model.get_value("title_require_selected", top_left)
+        val = self._cfg_model.get_value("title_require_selected", top_left)
         if val is not None:
             if val != self.tr_editor.get_selected():
                 self.tr_editor.set_selected(val)
 
         # Description exclude editor
-        val = self._config_model.get_value("descr_exclude_available", top_left)
+        val = self._cfg_model.get_value("descr_exclude_available", top_left)
         if val is not None and val != self.de_editor.get_available():
             self.de_editor.set_available(val)
-        val = self._config_model.get_value("descr_exclude_selected", top_left)
+        val = self._cfg_model.get_value("descr_exclude_selected", top_left)
         if val is not None:
             if val != self.de_editor.get_selected():
                 self.de_editor.set_selected(val)
 
         # Description require editor
-        val = self._config_model.get_value("descr_require_available", top_left)
+        val = self._cfg_model.get_value("descr_require_available", top_left)
         if val is not None and val != self.dr_editor.get_available():
             self.dr_editor.set_available(val)
-        val = self._config_model.get_value("descr_require_selected", top_left)
+        val = self._cfg_model.get_value("descr_require_selected", top_left)
         if val is not None:
             if val != self.dr_editor.get_selected():
                 self.dr_editor.set_selected(val)

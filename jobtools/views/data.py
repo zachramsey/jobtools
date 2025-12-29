@@ -40,7 +40,7 @@ class DataPage(QWidget):
                  data_model: JobsDataModel):
         super().__init__()
         self.setLayout(QVBoxLayout(self))
-        self._config_model = config_model
+        self._cfg_model = config_model
         self._data_model = data_model
         defaults: dict = {}
 
@@ -101,14 +101,14 @@ class DataPage(QWidget):
         self.layout().addWidget(self.table_view)
 
         # Register page with config model
-        self._config_model.register_page("data", defaults)
+        self._cfg_model.register_page("data", defaults)
 
         # Connect view to config model
         self.toggle_favorites.stateChanged.connect(
             lambda state: self._update_config("display_favorites", bool(state)))
 
         # Connect config model to view updates
-        self._config_model.dataChanged.connect(self._on_config_changed)
+        self._cfg_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
         """Get layout as QVBoxLayout."""
@@ -116,8 +116,8 @@ class DataPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update model data from view changes."""
-        if key in self._config_model.idcs:
-            self._config_model.setData(self._config_model.idcs[key], value, Qt.ItemDataRole.EditRole)
+        if key in self._cfg_model.idcs:
+            self._cfg_model.setData(self._cfg_model.idcs[key], value, Qt.ItemDataRole.EditRole)
 
     @Slot(QModelIndex)
     def _on_clickable(self, index):
@@ -142,6 +142,6 @@ class DataPage(QWidget):
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update data model when config model changes."""
         # Favorites filter
-        val = self._config_model.get_value("display_favorites", top_left)
+        val = self._cfg_model.get_value("display_favorites", top_left)
         if val is not None and val != self.toggle_favorites.isChecked():
             self.toggle_favorites.setChecked(val)

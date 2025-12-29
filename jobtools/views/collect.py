@@ -42,7 +42,7 @@ Example: "software engineer" AND (python OR java) NOT intern"""
 class CollectPage(QWidget):
     def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
-        self._config_model = config_model
+        self._cfg_model = config_model
         self._data_model = data_model
         defaults: dict = {}
 
@@ -104,7 +104,7 @@ class CollectPage(QWidget):
         self.run_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Register page with config model
-        self._config_model.register_page("collect", defaults)
+        self._cfg_model.register_page("collect", defaults)
 
         # Connect view to config model
         self.s_selector.selectionChanged.connect(
@@ -121,7 +121,7 @@ class CollectPage(QWidget):
             lambda vals: self._update_config("hours_old", vals))
 
         # Connect config model to view updates
-        self._config_model.dataChanged.connect(self._on_config_changed)
+        self._cfg_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
         """Override layout to remove type-checking errors."""
@@ -129,35 +129,35 @@ class CollectPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update model data from view changes."""
-        if key in self._config_model.idcs:
-            self._config_model.setData(self._config_model.idcs[key], value, Qt.ItemDataRole.EditRole)
+        if key in self._cfg_model.idcs:
+            self._cfg_model.setData(self._cfg_model.idcs[key], value, Qt.ItemDataRole.EditRole)
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when model data changes."""
         # Sites
-        val = self._config_model.get_value("sites_selected", top_left)
+        val = self._cfg_model.get_value("sites_selected", top_left)
         if val is not None and val != self.s_selector.get_selected():
             self.s_selector.set_selected(val)
-        val = self._config_model.get_value("sites_available", top_left)
+        val = self._cfg_model.get_value("sites_available", top_left)
         if val is not None and val != self.s_selector.get_available():
             self.s_selector.set_available(val)
 
         # Locations
-        val = self._config_model.get_value("locations_selected", top_left)
+        val = self._cfg_model.get_value("locations_selected", top_left)
         if val is not None and val != self.l_editor.get_selected():
             self.l_editor.set_selected(val)
-        val = self._config_model.get_value("locations_available", top_left)
+        val = self._cfg_model.get_value("locations_available", top_left)
         if val is not None and val != self.l_editor.get_available():
             self.l_editor.set_available(val)
 
         # Queries
-        val = self._config_model.get_value("queries", top_left)
+        val = self._cfg_model.get_value("queries", top_left)
         if val is not None and val != self.q_editor.get_items():
             self.q_editor.set_items(val)
 
         # Hours old
-        val = self._config_model.get_value("hours_old", top_left)
+        val = self._cfg_model.get_value("hours_old", top_left)
         if val is not None and val != self.h_editor.value():
             self.h_editor.setValue(val)
 
@@ -172,7 +172,7 @@ class CollectPage(QWidget):
             self.run_btn.style().polish(self.run_btn)
             # Setup data collection worker
             self._cancel_event = Event()
-            self.worker = CollectionWorker(self._config_model, self._cancel_event)
+            self.worker = CollectionWorker(self._cfg_model, self._cancel_event)
             self.worker_thread = QThread()
             self.worker.moveToThread(self.worker_thread)
             # Connect signals and slots

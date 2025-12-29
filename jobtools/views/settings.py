@@ -24,7 +24,7 @@ requests and help avoid IP blocking."""
 class SettingsPage(QWidget):
     def __init__(self, config_model: ConfigModel, data_model: JobsDataModel):
         super().__init__()
-        self._config_model = config_model
+        self._cfg_model = config_model
         self._data_model = data_model
         defaults: dict = {}
 
@@ -38,7 +38,7 @@ class SettingsPage(QWidget):
         load_layout.addWidget(load_header)
         self.config_select = QComboBox()
         self.config_select.setFixedWidth(300)
-        self.config_select.addItems([""]+self._config_model.get_saved_config_names())
+        self.config_select.addItems([""]+self._cfg_model.get_saved_config_names())
         load_layout.addWidget(self.config_select)
         self.config_load = QPushButton("Load")
         self.config_load.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -86,14 +86,14 @@ class SettingsPage(QWidget):
         self.layout().addStretch()
 
         # Register page with config model
-        self._config_model.register_page("settings", defaults)
+        self._cfg_model.register_page("settings", defaults)
 
         # Connect view to config model
         self.p_editor.textChanged.connect(
             lambda t: self._update_config("proxy", t))
 
         # Connect config model to view updates
-        self._config_model.dataChanged.connect(self._on_config_changed)
+        self._cfg_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
         """Override layout to remove type-checking errors."""
@@ -101,14 +101,14 @@ class SettingsPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update model data from view changes."""
-        if key in self._config_model.idcs:
-            self._config_model.setData(self._config_model.idcs[key], value, Qt.ItemDataRole.EditRole)
+        if key in self._cfg_model.idcs:
+            self._cfg_model.setData(self._cfg_model.idcs[key], value, Qt.ItemDataRole.EditRole)
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when model data changes."""
         # Proxy
-        val = self._config_model.get_value("proxy", top_left)
+        val = self._cfg_model.get_value("proxy", top_left)
         if val is not None and val != self.p_editor.text().strip():
             self.p_editor.setText(val)
 
@@ -121,12 +121,12 @@ class SettingsPage(QWidget):
         config_name = config_name.replace(" ", "_").lower()
         config_path = get_config_dir() / f"{config_name}.json"
         # Temporarily disconnect to avoid triggering updates
-        self._config_model.dataChanged.disconnect(self._data_model._on_config_changed)
+        self._cfg_model.dataChanged.disconnect(self._data_model._on_config_changed)
         # Load config and update data model
-        self._config_model.load_from_file(config_path)
+        self._cfg_model.load_from_file(config_path)
         self._data_model.init_config()
         # Reconnect signal
-        self._config_model.dataChanged.connect(self._data_model._on_config_changed)
+        self._cfg_model.dataChanged.connect(self._data_model._on_config_changed)
         # Update config edit box
         self.config_edit.setText(config_name)
 
@@ -135,7 +135,7 @@ class SettingsPage(QWidget):
         """Refresh the list of saved configurations."""
         temp = self.config_select.currentText()
         self.config_select.clear()
-        self.config_select.addItems([""]+self._config_model.get_saved_config_names())
+        self.config_select.addItems([""]+self._cfg_model.get_saved_config_names())
         self.config_select.setCurrentText(temp)
 
     @Slot()
@@ -146,9 +146,9 @@ class SettingsPage(QWidget):
             return
         config_name = config_name.replace(" ", "_").lower()
         config_path = get_config_dir() / f"{config_name}.json"
-        self._config_model.save_to_file(config_path)
+        self._cfg_model.save_to_file(config_path)
         # Update config selector
         temp = self.config_select.currentText()
         self.config_select.clear()
-        self.config_select.addItems([""]+self._config_model.get_saved_config_names())
+        self.config_select.addItems([""]+self._cfg_model.get_saved_config_names())
         self.config_select.setCurrentText(temp)

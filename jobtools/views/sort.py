@@ -147,7 +147,7 @@ class DegreeValueSelector(QWidget):
 class SortPage(QWidget):
     def __init__(self, config_model: ConfigModel):
         super().__init__()
-        self._config_model = config_model
+        self._cfg_model = config_model
         defaults: dict = {}
 
         self.setLayout(QVBoxLayout(self))
@@ -209,7 +209,7 @@ class SortPage(QWidget):
         self.layout().addStretch()
 
         # Register page with config model
-        self._config_model.register_page("sort", defaults)
+        self._cfg_model.register_page("sort", defaults)
 
         # Connect view to config model
         self.dv_selector.valuesChanged.connect(
@@ -232,7 +232,7 @@ class SortPage(QWidget):
             lambda avl: self._update_config("deprioritized_terms_available", avl))
 
         # Connect config model to view updates
-        self._config_model.dataChanged.connect(self._on_config_changed)
+        self._cfg_model.dataChanged.connect(self._on_config_changed)
 
     def layout(self) -> QVBoxLayout:
         """Override layout to remove type-checking errors."""
@@ -240,46 +240,46 @@ class SortPage(QWidget):
 
     def _update_config(self, key: str, value):
         """Update config model from view changes."""
-        idx = self._config_model.idcs.get(key)
+        idx = self._cfg_model.idcs.get(key)
         if idx is not None:
-            self._config_model.setData(idx, value, Qt.ItemDataRole.EditRole)
+            self._cfg_model.setData(idx, value, Qt.ItemDataRole.EditRole)
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update view when config model changes."""
         # Degree values
-        val = self._config_model.get_value("degree_values", top_left)
+        val = self._cfg_model.get_value("degree_values", top_left)
         if val is not None and val != self.dv_selector.get_values():
             self.dv_selector.set_values(*val)
 
         # Location order
-        val = self._config_model.get_value("location_order_available", top_left)
+        val = self._cfg_model.get_value("location_order_available", top_left)
         if val is not None and val != self.lo_selector.get_available():
             self.lo_selector.set_available(val)
-        val = self._config_model.get_value("location_order_selected", top_left)
+        val = self._cfg_model.get_value("location_order_selected", top_left)
         if val is not None and val != self.lo_selector.get_selected():
             self.lo_selector.set_selected(val)
 
         # Prioritized terms
-        val = self._config_model.get_value("prioritized_terms_available", top_left)
+        val = self._cfg_model.get_value("prioritized_terms_available", top_left)
         if val is not None and val != self.pt_selector.get_available():
             self.pt_selector.set_available(val)
-        val = self._config_model.get_value("prioritized_terms_selected", top_left)
+        val = self._cfg_model.get_value("prioritized_terms_selected", top_left)
         if val is not None and val != self.pt_selector.get_selected():
             self.pt_selector.set_selected(val)
 
         # Unprioritized terms
-        val = self._config_model.get_value("unprioritized_terms_available", top_left)
+        val = self._cfg_model.get_value("unprioritized_terms_available", top_left)
         if val is not None and val != self.ut_selector.get_available():
             self.ut_selector.set_available(val)
-        val = self._config_model.get_value("unprioritized_terms_selected", top_left)
+        val = self._cfg_model.get_value("unprioritized_terms_selected", top_left)
         if val is not None and val != self.ut_selector.get_selected():
             self.ut_selector.set_selected(val)
 
         # Deprioritized terms
-        val = self._config_model.get_value("deprioritized_terms_available", top_left)
+        val = self._cfg_model.get_value("deprioritized_terms_available", top_left)
         if val is not None and val != self.dt_selector.get_available():
             self.dt_selector.set_available(val)
-        val = self._config_model.get_value("deprioritized_terms_selected", top_left)
+        val = self._cfg_model.get_value("deprioritized_terms_selected", top_left)
         if val is not None and val != self.dt_selector.get_selected():
             self.dt_selector.set_selected(val)
