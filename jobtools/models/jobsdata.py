@@ -141,18 +141,30 @@ class JobsDataModel(QAbstractTableModel):
 
     def init_config(self):
         """Initialize data model with current config settings."""
-        work_models = [wm.upper() == "REMOTE" for wm in self._cfg_model.get_value("work_models")]
-        self.set_filter("work_models", "is_remote", work_models)
+        degree_level = self._cfg_model.get_value("degree_level")
+        degree_map = {"none": [], "bachelor": [0, 1, 3, 7],
+                      "master": [0, 2, 3, 6, 7], "doctorate": [0, 4, 5, 6, 7]}
+        if degree_sel := degree_map.get(degree_level):
+            self.set_filter("degree_level", "degree_bin", degree_sel)
+        work_models = self._cfg_model.get_value("work_models")
+        if len(work_models) == 1:
+            self.set_filter("work_models", "is_remote",
+                            [wm.upper() == "REMOTE" for wm in work_models])
         job_types = self._cfg_model.get_value("job_types")
-        self.set_filter("job_types", "job_type", job_types)
+        if len(job_types) > 0:
+            self.set_filter("job_types", "job_type", job_types)
         title_exclude = self._cfg_model.get_value("title_exclude_selected")
-        self.set_filter("title_exclude", "title", title_exclude, invert=True)
+        if len(title_exclude) > 0:
+            self.set_filter("title_exclude", "title", title_exclude, invert=True)
         title_require = self._cfg_model.get_value("title_require_selected")
-        self.set_filter("title_require", "title", title_require)
+        if len(title_require) > 0:
+            self.set_filter("title_require", "title", title_require)
         descr_exclude = self._cfg_model.get_value("descr_exclude_selected")
-        self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
+        if len(descr_exclude) > 0:
+            self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
         descr_require = self._cfg_model.get_value("descr_require_selected")
-        self.set_filter("descr_require", "description", descr_require)
+        if len(descr_require) > 0:
+            self.set_filter("descr_require", "description", descr_require)
 
         sites_selected = self._cfg_model.get_value("sites_selected")
         self.set_rank_order("site", sites_selected, "site_score")
@@ -178,35 +190,57 @@ class JobsDataModel(QAbstractTableModel):
 
     def update_filters(self):
         """Update data model filters from current config settings."""
-        work_models = [wm.upper() == "REMOTE" for wm in self._cfg_model.get_value("work_models")]
-        self.set_filter("work_models", "is_remote", work_models)
+        degree_level = self._cfg_model.get_value("degree_level")
+        degree_map = {"none": [], "bachelor": [0, 1, 3, 7],
+                      "master": [0, 2, 3, 6, 7], "doctorate": [0, 4, 5, 6, 7]}
+        if degree_sel := degree_map.get(degree_level):
+            self.set_filter("degree_level", "degree_bin", degree_sel)
+        else:
+            self.clear_filter("degree_level")
+        work_models = self._cfg_model.get_value("work_models")
+        if len(work_models) == 1:
+            self.set_filter("work_models", "is_remote",
+                            [wm.upper() == "REMOTE" for wm in work_models])
+        else:
+            self.clear_filter("work_models")
         job_types = self._cfg_model.get_value("job_types")
-        self.set_filter("job_types", "job_type", job_types)
+        if len(job_types) > 0:
+            self.set_filter("job_types", "job_type", job_types)
+        else:
+            self.clear_filter("job_types")
         title_exclude = self._cfg_model.get_value("title_exclude_selected")
-        self.set_filter("title_exclude", "title", title_exclude, invert=True)
+        if len(title_exclude) > 0:
+            self.set_filter("title_exclude", "title", title_exclude, invert=True)
+        else:
+            self.clear_filter("title_exclude")
         title_require = self._cfg_model.get_value("title_require_selected")
-        self.set_filter("title_require", "title", title_require)
+        if len(title_require) > 0:
+            self.set_filter("title_require", "title", title_require)
+        else:
+            self.clear_filter("title_require")
         descr_exclude = self._cfg_model.get_value("descr_exclude_selected")
-        self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
+        if len(descr_exclude) > 0:
+            self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
+        else:
+            self.clear_filter("descr_exclude")
         descr_require = self._cfg_model.get_value("descr_require_selected")
-        self.set_filter("descr_require", "description", descr_require)
+        if len(descr_require) > 0:
+            self.set_filter("descr_require", "description", descr_require)
+        else:
+            self.clear_filter("descr_require")
 
-        rebuild_active = False
         # Recent days filter
         recent_days = self._cfg_model.get_value("max_age_days")
         if recent_days != self.active_days:
             self.active_days = recent_days
-            rebuild_active = True
         # Favorites filter
         display_favorites = self._cfg_model.get_value("display_favorites")
         if display_favorites != self.display_favorites:
             self.display_favorites = display_favorites
-            rebuild_active = True
 
         # Apply changes to data model
         self.beginResetModel()
-        if rebuild_active:
-            self.build_active_data()
+        self.build_active_data()
         self.apply_filters()
         self.apply_sort()
         self.endResetModel()
@@ -436,6 +470,17 @@ class JobsDataModel(QAbstractTableModel):
             If True, invert the filter to exclude matching rows.
         """
         self._filters[identifier] = (column, expression, invert)
+
+    def clear_filter(self, identifier: str):
+        """Clear the filter with the specified identifier.
+
+        Parameters
+        ----------
+        identifier : str
+            Unique identifier for the filter to be cleared.
+        """
+        if identifier in self._filters:
+            del self._filters[identifier]
 
     def apply_filters(self):
         """Apply all set filters to the dynamic DataFrame."""
@@ -713,8 +758,11 @@ class JobsDataModel(QAbstractTableModel):
         # Parse locations into city and state
         df["city"], df["state"] = zip(*df["location"].map(parse_location))
         # Add degree existence columns
-        has_degrees = df["description"].map(parse_degrees)
-        df["has_ba"], df["has_ma"], df["has_phd"] = zip(*has_degrees)
+        ba, ma, phd = zip(*df["description"].map(parse_degrees))
+        df["has_ba"], df["has_ma"], df["has_phd"] = ba, ma, phd
+        df["degree_bin"] = (df["has_ba"].astype(int) +
+                          df["has_ma"].astype(int) * 2 +
+                          df["has_phd"].astype(int) * 4)
         return df
 
     @staticmethod

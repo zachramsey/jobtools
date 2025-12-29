@@ -1,12 +1,25 @@
 from jobspy.model import JobType  # type: ignore
 from PySide6.QtCore import QModelIndex, Qt, Slot
-from PySide6.QtWidgets import QHBoxLayout, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QHBoxLayout,
+    QRadioButton,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..models import ConfigModel
 from .widgets import QCheckBoxSelect, QChipSelect, QHeader
 
 MA_TT = """Maximum age of job postings to display.\n
 Jobs older than this value will be filtered out."""
+
+DL_TT = """Degree level required for job postings to display.\n
+None - no degree filtering; all jobs included.
+Bachelor - filter jobs in favor of Bachelor's degree.
+Master - filter jobs in favor of Master's degree.
+Doctorate - filter jobs in favor of Doctorate degree."""
 
 WM_TT = """Select which work models to include in results.\n
 Remote - jobs that can be done entirely remotely.
@@ -48,13 +61,29 @@ class FilterPage(QWidget):
 
         # Maximum age selector
         ma_layout = QHBoxLayout()
-        max_days_label = QHeader("Maximum Posting Age:", tooltip=MA_TT)
-        ma_layout.addWidget(max_days_label)
+        ma_header = QHeader("Maximum Posting Age:", tooltip=MA_TT)
+        ma_header.setFixedWidth(200)
+        ma_layout.addWidget(ma_header)
         self.ma_selector = QSpinBox(suffix=" days", minimum=1)
         ma_layout.addWidget(self.ma_selector)
         ma_layout.addStretch()
         self.layout().addLayout(ma_layout)
         defaults["max_age_days"] = 1
+
+        # Degree level selector
+        dl_layout = QHBoxLayout()
+        dl_header = QHeader("Degree Level", tooltip=DL_TT)
+        dl_header.setFixedWidth(200)
+        dl_layout.addWidget(dl_header)
+        self.dl_selector = QButtonGroup(self)
+        for level in ["none", "bachelor", "master", "doctorate"]:
+            btn = QRadioButton(level.title())
+            self.dl_selector.addButton(btn)
+            dl_layout.addWidget(btn)
+        self.dl_selector.buttons()[0].setChecked(True)
+        dl_layout.addStretch()
+        self.layout().addLayout(dl_layout)
+        defaults["degree_level"] = "none"
 
         # Work model selector
         wm_layout = QHBoxLayout()
@@ -129,6 +158,8 @@ class FilterPage(QWidget):
         # Connect view to config model
         self.ma_selector.valueChanged.connect(
             lambda val: self._update_config("max_age_days", val))
+        self.dl_selector.buttonClicked.connect(
+            lambda btn: self._update_config("degree_level", btn.text().lower()))
         self.wm_selector.selectionChanged.connect(
             lambda sel: self._update_config("work_models", sel))
         self.jt_selector.selectionChanged.connect(
@@ -170,6 +201,14 @@ class FilterPage(QWidget):
         val = self._cfg_model.get_value("max_age_days", top_left)
         if val is not None and val != self.ma_selector.value():
             self.ma_selector.setValue(val)
+
+        # Degree level selector
+        val = self._cfg_model.get_value("degree_level", top_left)
+        if val is not None:
+            for btn in self.dl_selector.buttons():
+                if btn.text().lower() == val and not btn.isChecked():
+                    btn.setChecked(True)
+                    break
 
         # Work model selector
         val = self._cfg_model.get_value("work_models", top_left)
