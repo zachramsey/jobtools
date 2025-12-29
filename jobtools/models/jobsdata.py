@@ -1,6 +1,6 @@
+import ast
 import datetime as dt
 import os
-import time
 from typing import Callable
 
 import numpy as np
@@ -61,15 +61,35 @@ class JobsDataModel(QAbstractTableModel):
     collectFinished = Signal()   # noqa: N815
 
     logger = JDLogger()
-    _converter = MarkdownConverter(
+    _md_converter = MarkdownConverter(
         bullets="*", default_title=True, escape_misc=False,
         heading_style=ATX, newline_style=SPACES, strong_em_symbol=UNDERSCORE
     )
 
+    LIST_COLS = ["id", "site", "job_url", "job_url_direct", "date_posted", "title", "location",
+                 "is_remote", "job_type", "job_level", "min_amount", "max_amount", "currency",
+                 "interval", "skills", "experience_range", "work_from_home_type"]
+    LIST_COL_NAMES = [f"{col}_list" for col in LIST_COLS]
+    DUPL_CRIT = [["id"], ["job_url_direct"], ["company", "title"], ["title", "description"]]
+
+    CMP_COLS = ["company", "emails", "company_industry", "company_url",
+                "company_logo", "company_url_direct", "company_addresses",
+                "company_num_employees", "company_revenue", "company_description",
+                "company_rating", "company_reviews_count", "vacancy_count"]
+    JOB_COLS = ["id", "site", "job_url", "job_url_direct", "title", "company", "location",
+                "date_posted", "job_type", "interval", "min_amount", "max_amount", "currency",
+                "is_remote", "job_level", "job_function", "description", "skills",
+                "experience_range", "work_from_home_type"]
+    for col in JOB_COLS:
+        if col in LIST_COLS:
+            JOB_COLS[JOB_COLS.index(col)] = f"{col}_list"
+
+    _list_converter = {col: ast.literal_eval for col in LIST_COL_NAMES}
+
     def __init__(self, config_model: ConfigModel):
         """Initialize the JobsDataModel instance."""
         super().__init__()
-        self._config_model = config_model
+        self._cfg_model = config_model
 
         # Raw data storage
         self._original_df = pd.DataFrame([FOOBAR_DATA])
@@ -84,7 +104,7 @@ class JobsDataModel(QAbstractTableModel):
         self.columns = self._original_df.columns.tolist()
         self._col_len_thresh: dict[str, int] = {}
         self._header_labels: dict[str, str] = {}
-        self._filters: dict[str, tuple[str, list[str]|str|bool|int|float|pd.Series|Callable, bool]] = {}
+        self._filters: dict[str, tuple[str, str|bool|int|float|list|pd.Series|Callable, bool]] = {}
         self._sort_column = None
         self._sort_order = Qt.SortOrder.AscendingOrder
 
@@ -99,7 +119,7 @@ class JobsDataModel(QAbstractTableModel):
         self._arch_path = get_data_dir()
         arch_file = self._arch_path / "jobs_data.csv"
         if os.path.exists(arch_file):
-            self._original_df = pd.read_csv(arch_file)
+            self._original_df = pd.read_csv(arch_file, converters=self._list_converter)
             self.logger.info(f"Loaded archived jobs data from '{arch_file}'.")
         else:
             self.logger.info(f"No archived jobs data found at '{arch_file}'.")
@@ -121,34 +141,34 @@ class JobsDataModel(QAbstractTableModel):
 
     def init_config(self):
         """Initialize data model with current config settings."""
-        work_models = [wm.upper() == "REMOTE" for wm in self._config_model.get_value("work_models")]
+        work_models = [wm.upper() == "REMOTE" for wm in self._cfg_model.get_value("work_models")]
         self.set_filter("work_models", "is_remote", work_models)
-        job_types = self._config_model.get_value("job_types")
+        job_types = self._cfg_model.get_value("job_types")
         self.set_filter("job_types", "job_type", job_types)
-        title_exclude = self._config_model.get_value("title_exclude_selected")
+        title_exclude = self._cfg_model.get_value("title_exclude_selected")
         self.set_filter("title_exclude", "title", title_exclude, invert=True)
-        title_require = self._config_model.get_value("title_require_selected")
+        title_require = self._cfg_model.get_value("title_require_selected")
         self.set_filter("title_require", "title", title_require)
-        descr_exclude = self._config_model.get_value("descr_exclude_selected")
+        descr_exclude = self._cfg_model.get_value("descr_exclude_selected")
         self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
-        descr_require = self._config_model.get_value("descr_require_selected")
+        descr_require = self._cfg_model.get_value("descr_require_selected")
         self.set_filter("descr_require", "description", descr_require)
 
-        sites_selected = self._config_model.get_value("sites_selected")
+        sites_selected = self._cfg_model.get_value("sites_selected")
         self.set_rank_order("site", sites_selected, "site_score")
-        degree_values = self._config_model.get_value("degree_values")
+        degree_values = self._cfg_model.get_value("degree_values")
         self.set_degree_values(degree_values)
-        location_order = self._config_model.get_value("location_order_selected")
+        location_order = self._cfg_model.get_value("location_order_selected")
         self.set_rank_order("state", location_order, "location_score")
-        prioritized_terms = self._config_model.get_value("prioritized_terms_selected")
+        prioritized_terms = self._cfg_model.get_value("prioritized_terms_selected")
         self.set_keyword_scores(prioritized_terms, score=1)
-        unprioritized_terms = self._config_model.get_value("unprioritized_terms_selected")
+        unprioritized_terms = self._cfg_model.get_value("unprioritized_terms_selected")
         self.set_keyword_scores(unprioritized_terms, score=0)
-        deprioritized_terms = self._config_model.get_value("deprioritized_terms_selected")
+        deprioritized_terms = self._cfg_model.get_value("deprioritized_terms_selected")
         self.set_keyword_scores(deprioritized_terms, score=-1)
 
-        self.display_favorites = self._config_model.get_value("display_favorites")
-        self.active_days = self._config_model.get_value("max_age_days")
+        self.display_favorites = self._cfg_model.get_value("display_favorites")
+        self.active_days = self._cfg_model.get_value("max_age_days")
 
         self.beginResetModel()
         self.build_active_data()
@@ -158,27 +178,27 @@ class JobsDataModel(QAbstractTableModel):
 
     def update_filters(self):
         """Update data model filters from current config settings."""
-        work_models = [wm.upper() == "REMOTE" for wm in self._config_model.get_value("work_models")]
+        work_models = [wm.upper() == "REMOTE" for wm in self._cfg_model.get_value("work_models")]
         self.set_filter("work_models", "is_remote", work_models)
-        job_types = self._config_model.get_value("job_types")
+        job_types = self._cfg_model.get_value("job_types")
         self.set_filter("job_types", "job_type", job_types)
-        title_exclude = self._config_model.get_value("title_exclude_selected")
+        title_exclude = self._cfg_model.get_value("title_exclude_selected")
         self.set_filter("title_exclude", "title", title_exclude, invert=True)
-        title_require = self._config_model.get_value("title_require_selected")
+        title_require = self._cfg_model.get_value("title_require_selected")
         self.set_filter("title_require", "title", title_require)
-        descr_exclude = self._config_model.get_value("descr_exclude_selected")
+        descr_exclude = self._cfg_model.get_value("descr_exclude_selected")
         self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
-        descr_require = self._config_model.get_value("descr_require_selected")
+        descr_require = self._cfg_model.get_value("descr_require_selected")
         self.set_filter("descr_require", "description", descr_require)
 
         rebuild_active = False
         # Recent days filter
-        recent_days = self._config_model.get_value("max_age_days")
+        recent_days = self._cfg_model.get_value("max_age_days")
         if recent_days != self.active_days:
             self.active_days = recent_days
             rebuild_active = True
         # Favorites filter
-        display_favorites = self._config_model.get_value("display_favorites")
+        display_favorites = self._cfg_model.get_value("display_favorites")
         if display_favorites != self.display_favorites:
             self.display_favorites = display_favorites
             rebuild_active = True
@@ -194,22 +214,22 @@ class JobsDataModel(QAbstractTableModel):
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
         """Update data model sorting when config model changes."""
-        val = self._config_model.get_value("sites_selected", top_left)
+        val = self._cfg_model.get_value("sites_selected", top_left)
         if val is not None:
             self.set_rank_order("site", val, "site_score")
-        val = self._config_model.get_value("degree_values", top_left)
+        val = self._cfg_model.get_value("degree_values", top_left)
         if val is not None:
             self.set_degree_values(val)
-        val = self._config_model.get_value("location_order_selected", top_left)
+        val = self._cfg_model.get_value("location_order_selected", top_left)
         if val is not None:
             self.set_rank_order("state", val, "location_score")
-        val = self._config_model.get_value("prioritized_terms_selected", top_left)
+        val = self._cfg_model.get_value("prioritized_terms_selected", top_left)
         if val is not None:
             self.set_keyword_scores(val, score=1)
-        val = self._config_model.get_value("unprioritized_terms_selected", top_left)
+        val = self._cfg_model.get_value("unprioritized_terms_selected", top_left)
         if val is not None:
             self.set_keyword_scores(val, score=0)
-        val = self._config_model.get_value("deprioritized_terms_selected", top_left)
+        val = self._cfg_model.get_value("deprioritized_terms_selected", top_left)
         if val is not None:
             self.set_keyword_scores(val, score=-1)
 
@@ -230,41 +250,40 @@ class JobsDataModel(QAbstractTableModel):
         jobs_data : pd.DataFrame
             DataFrame containing raw collected job postings.
         """
-        t_init = time.time()
         self.beginResetModel()
         if jobs_data.empty:
             self.endResetModel()
             self.logger.info("No new jobs collected.")
             return
         self._dynamic_df = jobs_data.copy()
-        n_init = len(self._dynamic_df)
         # Convert raw html descriptions to markdown
         self._dynamic_df["description"] = self._dynamic_df["description"].apply(
-            lambda html: self._converter.convert(html)
+            lambda html: self._md_converter.convert(html)
                          if isinstance(html, str) and len(html) > 0 else html)
         # Initialize 'is_favorite' column
         self._dynamic_df["is_favorite"] = False
-        # Remove duplicate jobs from current collection
-        self._dynamic_df = self.drop_duplicate_jobs(self._dynamic_df)
-        # Remove jobs already in original data
-        self._dynamic_df = self.drop_known_jobs(self._dynamic_df, self._original_df)
-        # Count jobs found
-        n_found = len(self._dynamic_df)
-        self.logger.info(f"Removed {n_init - n_found} known and duplicate jobs.")
         # Ensure date_posted is in YYYY-MM-DD format
-        self._dynamic_df["date_posted"] = pd.to_datetime(self._dynamic_df["date_posted"]).dt.strftime("%Y-%m-%d")
+        self._dynamic_df["date_posted"] = pd.to_datetime(
+            self._dynamic_df["date_posted"]).dt.strftime("%Y-%m-%d")
+        # Aggregate duplicate jobs
+        n_dyn_init = len(self._dynamic_df)
+        n_orig_init = len(self._original_df)
+        self._original_df = self.handle_duplicate_jobs(self._dynamic_df, self._original_df)
+        n_found = len(self._original_df) - n_orig_init
+        n_dupl = n_dyn_init - n_found
+        if n_dupl > 0:
+            self.logger.info(f"Aggregated {n_dupl} duplicate job postings.")
+        self.logger.info(f"Found {n_found} new job postings.")
         # Add to original data and update archive file
-        self._original_df = pd.concat([self._dynamic_df, self._original_df], ignore_index=True)
         archive_path = self._arch_path / "jobs_data.csv"
         self._original_df.to_csv(archive_path, index=False)
-        self.logger.info(f"Updated archive at '{archive_path}'.")
+        self.logger.info(f"Archived updated with {len(self._original_df)} unique postings.")
         # Rebuild recent data and apply filters/sorting
         self.build_active_data()
         self.apply_filters()
         self.apply_sort()
         # Signal model reset complete
         self.endResetModel()
-        self.logger.info(f"Collected {n_found} new jobs in {time.time() - t_init:.1f}s.")
 
     ###################################
     ## QAbstractTableModel Overrides ##
@@ -399,7 +418,7 @@ class JobsDataModel(QAbstractTableModel):
     def set_filter(self,
                     identifier: str,
                     column: str,
-                    expression: list[str]|str|bool|int|float|pd.Series|Callable,
+                    expression: str|bool|int|float|list|pd.Series|Callable,
                     invert: bool = False):
         """Filter data based on the specified expression in the given column.
 
@@ -429,7 +448,10 @@ class JobsDataModel(QAbstractTableModel):
                 combined_mask &= mask
             self._dynamic_df = self._dynamic_df[combined_mask].reset_index(drop=True)
 
-    def create_filter_mask(self, column: str, expression: list[str]|str|bool|int|float|pd.Series|Callable) -> pd.Series:
+    def create_filter_mask(self,
+                           column: str,
+                           expression: str|bool|int|float|list|pd.Series|Callable
+                           ) -> pd.Series:
         """Create a boolean mask indicating which rows match the specified expression.
 
         Parameters
@@ -455,7 +477,8 @@ class JobsDataModel(QAbstractTableModel):
             self.logger.warning(f"Column '{column}' not found in DataFrame.")
             mask = pd.Series(False, index=self._active_df.index)
         elif callable(expression):
-            mask = pd.Series(expression(self._active_df[column]), index=self._active_df.index).astype(bool)
+            mask = pd.Series(expression(self._active_df[column]),
+                             index=self._active_df.index).astype(bool)
         elif isinstance(expression, pd.Series):
             mask = expression.reindex(self._active_df.index).fillna(False).astype(bool)
         elif isinstance(expression, (bool, int, float)):
@@ -601,42 +624,86 @@ class JobsDataModel(QAbstractTableModel):
     def get_job_data(self, index: QModelIndex) -> dict:
         """Get the job data as a dictionary for the given model index."""
         data = self._dynamic_df.iloc[index.row()].copy()
+        data = data[self.JOB_COLS]
+        data.replace({pd.NA: None, np.nan: None}, inplace=True)
+        return data.to_dict()
+
+    def get_company_data(self, index: QModelIndex) -> dict:
+        """Get the company data as a dictionary for the given model index."""
+        data = self._dynamic_df.iloc[index.row()].copy()
+        data = data[self.CMP_COLS]
         data.replace({pd.NA: None, np.nan: None}, inplace=True)
         return data.to_dict()
 
     @staticmethod
-    def drop_duplicate_jobs(df: pd.DataFrame) -> pd.DataFrame:
-        """Remove duplicate job postings. Keeps the first occurrence."""
-        # Temporarily order jobs chronologically to keep oldest instances
-        df.sort_values(by="date_posted", ascending=True, inplace=True, ignore_index=True)
-        # Drop duplicates with the same job board identifier
-        df.drop_duplicates(subset=["id"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates pointing to the same direct job URL
-        df.drop_duplicates(subset=["job_url_direct"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates with the same company and title
-        df.drop_duplicates(subset=["company", "title"], keep="first", inplace=True, ignore_index=True)
-        # Drop duplicates with the same title and description
-        df.drop_duplicates(subset=["title", "description"], keep="first", inplace=True, ignore_index=True)
-        # Restore original order
-        df.sort_values(by="date_posted", ascending=False, inplace=True, ignore_index=True)
-        return df
+    def _last_date(s: pd.Series) -> str|None:
+        s = s.dropna()
+        return None if s.empty else s.loc[pd.to_datetime(s).idxmax()]
 
     @staticmethod
-    def drop_known_jobs(df: pd.DataFrame, parent_df: pd.DataFrame) -> pd.DataFrame:
-        """Remove job postings that already exist in the parent DataFrame."""
-        # Find duplicates with the same job board identifier
-        dup_id = pd.merge(df, parent_df, on="id", how="inner").index
-        # Find duplicates pointing to the same direct job URL
-        dup_url = pd.merge(df, parent_df, on="job_url_direct", how="inner").index
-        # Find duplicates with the same company and title
-        dup_company = pd.merge(df, parent_df, on=["company", "title"], how="inner").index
-        # Find duplicates with the same title and description
-        dup_description = pd.merge(df, parent_df, on=["title", "description"], how="inner").index
-        # Drop identified duplicates
-        dup_rows = dup_id.union(dup_url).union(dup_company).union(dup_description)
-        df.drop(index=dup_rows, inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        return df
+    def _longest_desc(s: pd.Series) -> str|None:
+        s = s.dropna()
+        return None if s.empty else s.loc[s.astype(str).str.len().idxmax()]
+
+    @staticmethod
+    def _last_valid(s: pd.Series) -> str|float|int|bool|None:
+        s = s.dropna()
+        return None if s.empty else s.iloc[-1]
+
+    @staticmethod
+    def handle_duplicate_jobs(df: pd.DataFrame, agg_df: pd.DataFrame) -> pd.DataFrame:
+        """Handle duplicate job postings within the given DataFrame.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame containing newly collected job postings.
+        agg_df : pd.DataFrame
+            DataFrame containing previously collected job postings.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with duplicates aggregated.
+        """
+        df = df.copy()
+        agg_df = agg_df.copy()
+        # Prepare list columns in both dataframes
+        for data in [df, agg_df]:
+            if not data.empty and not set(JobsDataModel.LIST_COL_NAMES).issubset(set(data.columns)):
+                for col in JobsDataModel.LIST_COLS:
+                    if col in data.columns and f"{col}_list" not in data.columns:
+                        data[f"{col}_list"] = data[col].apply(lambda x: [x] if pd.notna(x) else [])
+        # Prepare dataframe for aggregation
+        if df.empty and agg_df.empty:
+            return pd.DataFrame()
+        elif df.empty:
+            combined_df = agg_df
+        elif agg_df.empty:
+            combined_df = df
+        else:
+            combined_df = pd.concat([df, agg_df], ignore_index=True)
+        # Remove exact duplicates
+        combined_df.drop_duplicates(JobsDataModel.LIST_COLS, inplace=True, ignore_index=True)
+        # Define aggregation rules
+        agg_rules = {}
+        for col in combined_df.columns:
+            if col.endswith("_list"):
+                # concatenate lists
+                agg_rules[col] = "sum"
+            elif col == "date_posted":
+                # most recent posting date
+                agg_rules[col] = JobsDataModel._last_date      # type: ignore
+            elif col.endswith("description"):
+                # take longest description
+                agg_rules[col] = JobsDataModel._longest_desc    # type: ignore
+            else:
+                # otherwise, take the last non-null value
+                agg_rules[col] = JobsDataModel._last_valid      # type: ignore
+        # Aggregate duplicates
+        for criteria in JobsDataModel.DUPL_CRIT:
+            combined_df = combined_df.groupby(criteria, as_index=False, dropna=False).agg(agg_rules)
+        return combined_df
 
     @staticmethod
     def build_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -651,7 +718,7 @@ class JobsDataModel(QAbstractTableModel):
         return df
 
     @staticmethod
-    def calc_col_len_thresh(df: pd.DataFrame, col: str, method: str = "iqr") -> int:
+    def calc_col_len_thresh(df: pd.DataFrame, col: str) -> int:
         """Calculate string length threshold for wrapping long text in the specified column."""
         if len(df[col]) == 0:
             return 80
@@ -661,14 +728,8 @@ class JobsDataModel(QAbstractTableModel):
         else:
             item_len = df[col].str.len()
         if sum(item_len > 80) == 0:
-            thresh = 80
-        elif method == "iqr":
-            upper, lower = item_len.quantile(0.75), item_len.quantile(0.25)
-            thresh = int(upper + 1.5 * (upper - lower))
-        elif method == "zscore":
+            return 80
+        else:
             mean, std = item_len.mean(), item_len.std()
             z_score = (item_len - mean) / std
-            thresh = int(item_len[z_score <= 3].max())
-        else:
-            thresh = 80
-        return min(thresh, 80)
+            return int(item_len[z_score <= 2].max())

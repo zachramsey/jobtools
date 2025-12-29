@@ -126,7 +126,7 @@ class DataPage(QWidget):
         if col == "is_favorite":
             self._data_model.toggle_favorite(index)
         elif col == "company":
-            company_data = self._data_model.get_job_data(index)
+            company_data = self._data_model.get_company_data(index)
             details_dialog = CompanyDetails(company_data, parent=self.table_view)
             details_dialog.exec()
         elif col == "title":
