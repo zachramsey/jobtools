@@ -84,30 +84,37 @@ class CollectionWorker(QObject):
                                 user_agent=None
                             )
                             break  # Exit retry loop on success
-                        except (requests.exceptions.ReadTimeout, urllib3.exceptions.ReadTimeoutError) as e:
+                        except (requests.exceptions.ReadTimeout,
+                                urllib3.exceptions.ReadTimeoutError) as e:
                             # Error occured during request
                             if self.cancel_event and self.cancel_event.is_set():
                                 break
-                            JobsDataModel.logger.warning(f"Query {i_qry+1:02d}, Location {i_loc+1:02d} | "
-                                                         f"Attempt {attempt} failed: {e}")
+                            JobsDataModel.logger.warning(
+                                f"Query {i_qry+1:02d}, Location {i_loc+1:02d}"
+                                f" | Attempt {attempt} failed: {e}")
                             if attempt == self.max_retries:
                                 # Max retries reached, log and skip
-                                JobsDataModel.logger.error(f"Query {i_qry+1:02d}, Location {i_loc+1:02d} | "
-                                                            "Max retries reached. Skipping.")
+                                JobsDataModel.logger.error(
+                                    f"Query {i_qry+1:02d}, Location {i_loc+1:02d}"
+                                     " | Max retries reached. Skipping.")
                             else:
                                 # Exponential backoff before retrying
                                 time.sleep(self.backoff_base * (2 ** (attempt - 1)))
                     if jobs.empty:
                         # No jobs found, move to next request
-                        JobsDataModel.logger.info(f"Query {i_qry+1:02d}, Location {i_loc+1:02d} | No jobs found")
+                        JobsDataModel.logger.info(
+                            f"Query {i_qry+1:02d}, Location {i_loc+1:02d}"
+                             " | No jobs found")
                         continue
                     # Filter out jobs older than hours_old
                     datetime = pd.to_datetime(jobs["date_posted"])
                     cutoff = dt.datetime.now() - dt.timedelta(hours=self.hours_old)
                     cutoff = cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
                     jobs = jobs[datetime >= cutoff]
-                    JobsDataModel.logger.info(f"Query {i_qry+1:02d}, Location {i_loc+1:02d} | Collected: "
-                                              f"{len(jobs):>5} | Elapsed: {self.get_elapsed(t_start, time.time())}")
+                    JobsDataModel.logger.info(
+                        f"Query {i_qry+1:02d}, Location {i_loc+1:02d}"
+                        f" | Collected: {len(jobs):>5}"
+                        f" | Elapsed: {self.get_elapsed(t_start, time.time())}")
                     # Append to main data
                     self.data = pd.concat([self.data, jobs], ignore_index=True)
                     self.data.reset_index(drop=True, inplace=True)
@@ -116,9 +123,12 @@ class CollectionWorker(QObject):
                         break
                 if self.cancel_event and self.cancel_event.is_set():
                     break
-            JobsDataModel.logger.info(f"Summary | Collected: {len(self.data)} | "
-                                      f"Elapsed: {self.get_elapsed(t_init, time.time())}")
+            JobsDataModel.logger.info(
+                f"{"Summary":^21}"
+                f" | Collected: {len(self.data):>5}"
+                f" | Elapsed: {self.get_elapsed(t_init, time.time())}")
             # Emit finished signal
+            time.sleep(1)  # Small delay to ensure UI updates
             if self.cancel_event and self.cancel_event.is_set():
                 JobsDataModel.logger.info("Job collection cancelled by user.")
                 self.finished.emit("")

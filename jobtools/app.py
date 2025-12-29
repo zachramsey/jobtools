@@ -102,7 +102,7 @@ class JobToolsApp(QMainWindow):
             lambda: self.nav_panel.btn_group.buttons()[4].click())
         # Go to data page when collection finishes
         data_model.collectFinished.connect(
-            lambda _: self.nav_panel.btn_group.buttons()[0].click())
+            lambda: self.nav_panel.btn_group.buttons()[0].click())
 
         # Load config from last session
         cfg_model.load_last_config()
