@@ -139,33 +139,63 @@ class JobsDataModel(QAbstractTableModel):
     ##        Config Handling       ##
     ##################################
 
-    def init_config(self):
-        """Initialize data model with current config settings."""
+    def __update_filters(self) -> bool:
+        """Update data model filters from current config settings."""
+        updated = False
         degree_level = self._cfg_model.get_value("degree_level")
         degree_map = {"none": [], "bachelor": [0, 1, 3, 7],
                       "master": [0, 2, 3, 6, 7], "doctorate": [0, 4, 5, 6, 7]}
         if degree_sel := degree_map.get(degree_level):
             self.set_filter("degree_level", "degree_bin", degree_sel)
+            updated = True
+        else:
+            self.clear_filter("degree_level")
         work_models = self._cfg_model.get_value("work_models")
         if len(work_models) == 1:
             self.set_filter("work_models", "is_remote",
                             [wm.upper() == "REMOTE" for wm in work_models])
+            updated = True
+        else:
+            self.clear_filter("work_models")
         job_types = self._cfg_model.get_value("job_types")
         if len(job_types) > 0:
             self.set_filter("job_types", "job_type", job_types)
+            updated = True
+        else:
+            self.clear_filter("job_types")
         title_exclude = self._cfg_model.get_value("title_exclude_selected")
         if len(title_exclude) > 0:
             self.set_filter("title_exclude", "title", title_exclude, invert=True)
+            updated = True
+        else:
+            self.clear_filter("title_exclude")
         title_require = self._cfg_model.get_value("title_require_selected")
         if len(title_require) > 0:
             self.set_filter("title_require", "title", title_require)
+            updated = True
+        else:
+            self.clear_filter("title_require")
         descr_exclude = self._cfg_model.get_value("descr_exclude_selected")
         if len(descr_exclude) > 0:
             self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
+            updated = True
+        else:
+            self.clear_filter("descr_exclude")
         descr_require = self._cfg_model.get_value("descr_require_selected")
         if len(descr_require) > 0:
             self.set_filter("descr_require", "description", descr_require)
+            updated = True
+        else:
+            self.clear_filter("descr_require")
+        return updated
 
+    def init_config(self):
+        """Initialize data model with current config settings."""
+        # Update filter settings
+        self.display_favorites = self._cfg_model.get_value("display_favorites")
+        self.active_days = self._cfg_model.get_value("max_age_days")
+        updated = self.__update_filters()
+        # Update sort settings
         sites_selected = self._cfg_model.get_value("sites_selected")
         self.set_rank_order("site", sites_selected, "site_score")
         degree_values = self._cfg_model.get_value("degree_values")
@@ -178,76 +208,39 @@ class JobsDataModel(QAbstractTableModel):
         self.set_keyword_scores(unprioritized_terms, score=0)
         deprioritized_terms = self._cfg_model.get_value("deprioritized_terms_selected")
         self.set_keyword_scores(deprioritized_terms, score=-1)
-
-        self.display_favorites = self._cfg_model.get_value("display_favorites")
-        self.active_days = self._cfg_model.get_value("max_age_days")
-
+        # Apply changes to data model
         self.beginResetModel()
         self.build_active_data()
-        self.apply_filters()
+        if updated:
+            self.apply_filters()
         self.apply_sort()
         self.endResetModel()
 
     def update_filters(self):
         """Update data model filters from current config settings."""
-        degree_level = self._cfg_model.get_value("degree_level")
-        degree_map = {"none": [], "bachelor": [0, 1, 3, 7],
-                      "master": [0, 2, 3, 6, 7], "doctorate": [0, 4, 5, 6, 7]}
-        if degree_sel := degree_map.get(degree_level):
-            self.set_filter("degree_level", "degree_bin", degree_sel)
-        else:
-            self.clear_filter("degree_level")
-        work_models = self._cfg_model.get_value("work_models")
-        if len(work_models) == 1:
-            self.set_filter("work_models", "is_remote",
-                            [wm.upper() == "REMOTE" for wm in work_models])
-        else:
-            self.clear_filter("work_models")
-        job_types = self._cfg_model.get_value("job_types")
-        if len(job_types) > 0:
-            self.set_filter("job_types", "job_type", job_types)
-        else:
-            self.clear_filter("job_types")
-        title_exclude = self._cfg_model.get_value("title_exclude_selected")
-        if len(title_exclude) > 0:
-            self.set_filter("title_exclude", "title", title_exclude, invert=True)
-        else:
-            self.clear_filter("title_exclude")
-        title_require = self._cfg_model.get_value("title_require_selected")
-        if len(title_require) > 0:
-            self.set_filter("title_require", "title", title_require)
-        else:
-            self.clear_filter("title_require")
-        descr_exclude = self._cfg_model.get_value("descr_exclude_selected")
-        if len(descr_exclude) > 0:
-            self.set_filter("descr_exclude", "description", descr_exclude, invert=True)
-        else:
-            self.clear_filter("descr_exclude")
-        descr_require = self._cfg_model.get_value("descr_require_selected")
-        if len(descr_require) > 0:
-            self.set_filter("descr_require", "description", descr_require)
-        else:
-            self.clear_filter("descr_require")
-
+        # Update filter settings
+        updated = self.__update_filters()
         # Recent days filter
         recent_days = self._cfg_model.get_value("max_age_days")
         if recent_days != self.active_days:
             self.active_days = recent_days
+            updated = True
         # Favorites filter
         display_favorites = self._cfg_model.get_value("display_favorites")
         if display_favorites != self.display_favorites:
             self.display_favorites = display_favorites
-
+            updated = True
         # Apply changes to data model
         self.beginResetModel()
         self.build_active_data()
-        self.apply_filters()
+        if updated:
+            self.apply_filters()
         self.apply_sort()
         self.endResetModel()
 
     @Slot(QModelIndex, QModelIndex)
     def _on_config_changed(self, top_left: QModelIndex, bottom_right: QModelIndex):
-        """Update data model sorting when config model changes."""
+        """Update data model sorting automatically when config model changes."""
         val = self._cfg_model.get_value("sites_selected", top_left)
         if val is not None:
             self.set_rank_order("site", val, "site_score")
@@ -266,7 +259,6 @@ class JobsDataModel(QAbstractTableModel):
         val = self._cfg_model.get_value("deprioritized_terms_selected", top_left)
         if val is not None:
             self.set_keyword_scores(val, score=-1)
-
         # Apply changes to data model
         self.beginResetModel()
         self.apply_sort()
@@ -713,6 +705,12 @@ class JobsDataModel(QAbstractTableModel):
         """
         df = df.copy()
         agg_df = agg_df.copy()
+        # Ensure list columns are of consistent type
+        for col in JobsDataModel.LIST_COLS:
+            if col in df.columns:
+                df[col] = df[col].astype(object)
+            if col in agg_df.columns:
+                agg_df[col] = agg_df[col].astype(object)
         # Prepare list columns in both dataframes
         for data in [df, agg_df]:
             if not data.empty and not set(JobsDataModel.LIST_COL_NAMES).issubset(set(data.columns)):
@@ -723,31 +721,45 @@ class JobsDataModel(QAbstractTableModel):
         if df.empty and agg_df.empty:
             return pd.DataFrame()
         elif df.empty:
-            combined_df = agg_df
-        elif agg_df.empty:
-            combined_df = df
+            return agg_df
         else:
-            combined_df = pd.concat([df, agg_df], ignore_index=True)
-        # Remove exact duplicates
-        combined_df.drop_duplicates(JobsDataModel.LIST_COLS, inplace=True, ignore_index=True)
+            # Strict deduplication
+            df.drop_duplicates(JobsDataModel.LIST_COLS, inplace=True, ignore_index=True)
+            if not agg_df.empty:
+                agg_df_list_cols = agg_df[JobsDataModel.LIST_COLS]
+                df = df.merge(agg_df_list_cols, on=JobsDataModel.LIST_COLS,
+                              how="left", indicator=True)
+                df = df[df["_merge"] == "left_only"].drop(columns=["_merge"])
+                if df.empty:
+                    return agg_df.reset_index(drop=True)    # No new unique jobs
+        # Get relevant rows from existing data
+        agg_df.reset_index(drop=True, inplace=True)
+        affected_indices = set()
+        for criteria in JobsDataModel.DUPL_CRIT:
+            new_keys = df[criteria].dropna().drop_duplicates()
+            if not new_keys.empty:
+                matches = agg_df[criteria].reset_index().merge(new_keys, on=criteria, how="inner")
+                affected_indices.update(matches["index"].tolist())
+        # Separate affected and unaffected existing data
+        is_active = agg_df.index.isin(affected_indices)
+        agg_df_active, agg_df_static = agg_df[is_active], agg_df[~is_active]
+        combined_df = pd.concat([df, agg_df_active], ignore_index=True)
         # Define aggregation rules
         agg_rules = {}
         for col in combined_df.columns:
             if col.endswith("_list"):
-                # concatenate lists
                 agg_rules[col] = "sum"
             elif col == "date_posted":
-                # most recent posting date
                 agg_rules[col] = JobsDataModel._last_date      # type: ignore
             elif col.endswith("description"):
-                # take longest description
                 agg_rules[col] = JobsDataModel._longest_desc    # type: ignore
             else:
-                # otherwise, take the last non-null value
                 agg_rules[col] = JobsDataModel._last_valid      # type: ignore
         # Aggregate duplicates
         for criteria in JobsDataModel.DUPL_CRIT:
             combined_df = combined_df.groupby(criteria, as_index=False, dropna=False).agg(agg_rules)
+        # Recombine with unaffected existing data
+        combined_df = pd.concat([combined_df, agg_df_static], ignore_index=True)
         return combined_df
 
     @staticmethod
