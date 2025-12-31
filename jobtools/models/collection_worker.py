@@ -4,10 +4,10 @@ import time
 import traceback
 
 import pandas as pd  # type: ignore
-import requests  # type: ignore
-import urllib3.exceptions
 from jobspy import scrape_jobs  # type: ignore
 from PySide6.QtCore import QObject, Signal, Slot
+from requests.exceptions import RequestException  # type: ignore
+from urllib3.exceptions import HTTPError
 
 from . import ConfigModel, JobsDataModel
 
@@ -84,8 +84,7 @@ class CollectionWorker(QObject):
                                 user_agent=None
                             )
                             break  # Exit retry loop on success
-                        except (requests.exceptions.ReadTimeout,
-                                urllib3.exceptions.ReadTimeoutError) as e:
+                        except (RequestException, HTTPError) as e:
                             # Error occured during request
                             if self.cancel_event and self.cancel_event.is_set():
                                 break

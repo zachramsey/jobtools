@@ -7,4 +7,6 @@ I know these should be set up as issues. I'm not there yet :)
 - [Feature] Once more specific information is being parsed from jobs, provide a means for users to customize which fields are displayed in the data table.
 - [Feature] Company exclusion (& requirement?)
 - [Feature] Job level selection via title/description parsing
+- [Feature] Job/company search functionality
+- [Enhancement] Find and display similar jobs on job details page
 - [Enhancement] Parse the "# years" qualifiers found among skills and experience
