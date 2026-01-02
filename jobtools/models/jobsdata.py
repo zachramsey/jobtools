@@ -20,7 +20,7 @@ FOOBAR_DATA = {
     "title": "Example Job Title",
     "company": "Example Company",
     "location": "Example City, EX, USA",
-    "date_posted": "1970-01-01",
+    "date_posted": f"{dt.datetime.now().strftime('%Y-%m-%d')}",
     "job_type": "fulltime",
     "salary_source": "direct_data",
     "interval": "yearly",
@@ -291,6 +291,10 @@ class JobsDataModel(QAbstractTableModel):
         # Ensure date_posted is in YYYY-MM-DD format
         self._dynamic_df["date_posted"] = pd.to_datetime(
             self._dynamic_df["date_posted"]).dt.strftime("%Y-%m-%d")
+        # Remove placeholder data if present
+        real_data_mask = self._original_df["id"] != FOOBAR_DATA["id"]
+        if not real_data_mask.all():
+            self._original_df = self._original_df[real_data_mask].reset_index(drop=True)
         # Aggregate duplicate jobs
         n_dyn_init = len(self._dynamic_df)
         n_orig_init = len(self._original_df)
@@ -363,7 +367,7 @@ class JobsDataModel(QAbstractTableModel):
         col = self.columns[index.column()]
         if col not in self._dynamic_df.columns:
             return None
-        val = self._dynamic_df[col].iloc[index.row()]
+        val = self._dynamic_df.loc[index.row(), col]
         try:
             val = val.item()
         except AttributeError:
@@ -782,7 +786,7 @@ class JobsDataModel(QAbstractTableModel):
         """Calculate string length threshold for wrapping long text in the specified column."""
         if len(df[col]) == 0:
             return 80
-        if isinstance(df[col].iloc[0], list):
+        if isinstance(df.loc[0, col], list):
             item_len = df[col].apply(
                 lambda strings: sum(len(str(v)) for v in strings) + (2 * (len(strings) - 1)))
         else:

@@ -4,7 +4,7 @@ from functools import cache
 from pathlib import Path
 from xml.etree import ElementTree
 
-from PySide6.QtCore import QFile, Qt, QTextStream
+from PySide6.QtCore import QFile, QStandardPaths, Qt, QTextStream
 from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QIcon
 
 from ..resources import rc_resources  # noqa: F401
@@ -14,7 +14,8 @@ from ..resources import rc_resources  # noqa: F401
 @cache
 def get_config_dir() -> Path:
     """Get the path to the JobTools app configuration directory."""
-    cfg_dir = Path(__file__).parent.parent / "configs"
+    cfg_dir = Path(QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppConfigLocation))
     if not cfg_dir.exists():
         cfg_dir.mkdir(parents=True, exist_ok=True)
     return cfg_dir
@@ -23,7 +24,8 @@ def get_config_dir() -> Path:
 @cache
 def get_data_dir() -> Path:
     """Get the path to the JobTools app data directory."""
-    data_dir = Path(__file__).parent.parent / "data"
+    data_dir = Path(QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppDataLocation))
     if not data_dir.exists():
         data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir

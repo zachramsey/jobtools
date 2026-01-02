@@ -6,6 +6,7 @@ from jobtools import JobToolsApp
 
 if __name__ == "__main__":
     app = QApplication()
+    app.setApplicationName("JobTools")
     window = JobToolsApp()
     window.showMaximized()
     sys.exit(app.exec())

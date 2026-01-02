@@ -22,11 +22,11 @@ class CollectionWorker(QObject):
         super().__init__()
         self.data = pd.DataFrame()
 
-        self.queries = config_model.get_value("queries")
-        self.locations = config_model.get_value("locations_selected")
-        self.sites = config_model.get_value("sites_selected")
-        self.hours_old = config_model.get_value("hours_old")
-        self.proxy = config_model.get_value("proxy")
+        self.queries = config_model.get_value("queries") or None
+        self.locations = config_model.get_value("locations_selected") or None
+        self.sites = config_model.get_value("sites_selected") or None
+        self.hours_old = config_model.get_value("hours_old") or None
+        self.proxy = config_model.get_value("proxy") or None
 
         self.cancel_event = cancel_event
 
