@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..utils import clean_description
+from ..utils import clean_description, get_theme_colors
 from .widgets import QWebImageLabel
 
 
@@ -50,6 +50,7 @@ class JobDetails(QDialog):
         if description := job_data.get("description"):
             description_view = QTextEdit(markdown=clean_description(description))
             description_view.setReadOnly(True)
+            description_view.setStyleSheet(f"color: {get_theme_colors()['primaryTextColor']};")
             self.layout().addWidget(description_view)
         self.layout().setStretch(1, 1)
 

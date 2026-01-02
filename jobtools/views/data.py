@@ -82,14 +82,18 @@ class DataPage(QWidget):
         self.table_view = HoverTableView()
         self.table_view.setModel(self._data_model)
         # self.table_view.setSortingEnabled(True)
-        self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.table_view.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self.table_view.horizontalHeader().setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.horizontalHeader().setStretchLastSection(True)
         self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table_view.verticalHeader().setVisible(False)
         self.table_view.setAlternatingRowColors(True)
-        self.table_view.setProperty("class", "data-table")
+        self.table_view.setStyleSheet("QTableView::item { padding: 5px; }")
+        self.table_view.horizontalHeader().setStyleSheet("""
+            QHeaderView { font-weight: bold; }
+            QHeaderView::section { padding-left: 10px; padding-right: 10px; }
+        """)
         bg_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY, 0.7)
         alt_color = blend_colors(ThemeColor.SECONDARY_DARK, ThemeColor.SECONDARY_LIGHT, 0.7)
         self.table_view.setStyleSheet(f"QTableView {{ background-color: {bg_color}; \

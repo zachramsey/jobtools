@@ -2,10 +2,12 @@ import re
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
+from xml.etree import ElementTree
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QGuiApplication, QIcon
-from qt_material import get_theme  # type: ignore
+from PySide6.QtCore import QFile, Qt, QTextStream
+from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QIcon
+
+from ..resources import rc_resources  # noqa: F401
 
 # --- Directory Utilities ---
 
@@ -28,39 +30,40 @@ def get_data_dir() -> Path:
 
 
 @cache
-def get_resource_dir() -> Path:
-    """Get the path to the JobTools app resources directory."""
-    rsrc_dir = Path(__file__).parent.parent / "resources"
-    if not rsrc_dir.exists():
-        raise FileNotFoundError(f"Resources directory not found at {rsrc_dir}.")
-    return rsrc_dir
+def get_sys_theme() -> str:
+    """Get the current system theme (`"light"` or `"dark"`)."""
+    if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
+        return "dark"
+    return "light"
 
 
-def get_data_sources() -> dict[str, Path]:
-    """Get available data sources from the data directory.
+def get_stylesheet() -> str:
+    """Get the current theme's stylesheet."""
+    file = QFile(f":/styles/{get_sys_theme()}.qss")
+    if not file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
+        raise FileNotFoundError("Failed to load stylesheet.")
+    stylesheet = QTextStream(file).readAll()
+    file.close()
+    return stylesheet
+
+
+def add_font(font_name: str) -> int:
+    """Add a font to the application from resources.
+
+    Parameters
+    ----------
+    font_name : str
+        The name of the font file (without extension) located in the resources.
 
     Returns
     -------
-    dict[str, str]
-        Mapping of data source labels to their file paths.
+    int
+        The ID of the loaded font.
     """
-    data_dir = get_data_dir()
-    sources = {}
-    for date in data_dir.iterdir():
-        if not date.name.isdigit() or len(date.name) != 8:
-            continue
-        for time in date.iterdir():
-            if not time.name.isdigit() or len(time.name) != 4:
-                continue
-            for file in time.iterdir():
-                if file.suffix == ".csv":
-                    year, month, day = date.name[:4], date.name[4:6], date.name[6:8]
-                    hour, minute = time.name[:2], time.name[2:4]
-                    source_name = f"{year}-{month}-{day} {hour}:{minute}"
-                    sources[source_name] = file
-    # Sort sources in reverse chronological order
-    sources = dict(sorted(sources.items(), reverse=True))
-    return sources
+    font_id = QFontDatabase.addApplicationFont(f":/fonts/{font_name}.ttf")
+    if font_id == -1:
+        raise ValueError(f"Font '{font_name}' could not be loaded.")
+    return font_id
 
 
 # --- Theme Utilities ---
@@ -76,21 +79,21 @@ class ThemeColor(StrEnum):
 
 
 @cache
-def get_sys_theme() -> str:
-    """Get the current system theme (`"light"` or `"dark"`)."""
-    if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
-        return "dark"
-    return "light"
-
-
-@cache
 def get_theme_colors() -> dict[str, str]:
     """Get the current theme's colors as a mapping of names to hex values."""
-    theme_name = f"theme_{get_sys_theme()}.xml"
-    theme_path = get_resource_dir() / theme_name
-    if not theme_path.exists():
-        raise FileNotFoundError(f"Theme {theme_name} not found in resource directory.")
-    return get_theme(str(theme_path))
+    file = QFile(f":/colors/{get_sys_theme()}.xml")
+    if not file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text):
+        raise FileNotFoundError("Failed to load theme colors.")
+    xml_str = file.readAll().data().decode()    # type: ignore
+    file.close()
+    root = ElementTree.fromstring(xml_str)
+    colors = {}
+    for color in root.findall("color"):
+        name = color.get("name")
+        value = color.text
+        if name and value:
+            colors[name] = value
+    return colors
 
 
 @cache

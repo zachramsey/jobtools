@@ -3,7 +3,7 @@ import logging
 from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtWidgets import QTextEdit, QVBoxLayout, QWidget
 
-from ..utils import JDLogger
+from ..utils import JDLogger, get_theme_colors
 
 
 class QtLogHandler(QObject, logging.Handler):
@@ -28,7 +28,6 @@ class ConsolePage(QWidget):
     def __init__(self):
         """Initialize the ConsolePage."""
         super().__init__()
-        self.setProperty("class", "log-panel")
 
         # Layout Setup
         self.setLayout(QVBoxLayout(self))
@@ -46,6 +45,8 @@ class ConsolePage(QWidget):
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
         self.log_output.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.log_output.setStyleSheet(f'font-family: "Roboto Mono", monospace; \
+                                        color: {get_theme_colors()["primaryTextColor"]};')
 
         # Assemble Log Panel
         self.layout().addWidget(self.log_output)        # type: ignore

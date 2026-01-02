@@ -1,4 +1,4 @@
-from PySide6.QtCore import QSize, Qt, Slot
+from PySide6.QtCore import QDir, QSize, Qt, Slot
 from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qt_material import apply_stylesheet  # type: ignore
 
 from .models import ConfigModel, JobsDataModel
-from .utils import get_icon, get_resource_dir, get_sys_theme
+from .resources import rc_icons_dark, rc_icons_light, rc_resources  # noqa: F401
+from .utils import add_font, get_icon, get_stylesheet, get_sys_theme, get_theme_colors
 from .views import CollectPage, ConsolePage, DataPage, FilterPage, SettingsPage, SortPage
 
 
@@ -24,26 +24,26 @@ class JobToolsApp(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        # Load qt-material icons
+        QDir.addSearchPath("icon", f":/icons_{get_sys_theme()}")
+
+        # Get theme colors
+        self.colors = get_theme_colors()
+
         # Add Roboto as default application font
-        sans_path = str(get_resource_dir() / "Roboto.ttf")
-        sans_font_id = QFontDatabase.addApplicationFont(sans_path)
-        if sans_font_id != -1:
-            sans_font = QFontDatabase.applicationFontFamilies(sans_font_id)[0]
-            QGuiApplication.setFont(sans_font)
+        sans_font_id = add_font("sans")
+        sans_font = QFontDatabase.applicationFontFamilies(sans_font_id)[0]
+        QGuiApplication.setFont(sans_font)
 
         # Add Roboto Mono as monospace font
-        mono_path = str(get_resource_dir() / "RobotoMono.ttf")
-        mono_font_id = QFontDatabase.addApplicationFont(mono_path)
-        if mono_font_id != -1:
-            mono_font = QFontDatabase.applicationFontFamilies(mono_font_id)[0]
-            QFont(mono_font).setStyleHint(QFont.StyleHint.Monospace)
+        mono_font_id = add_font("mono")
+        mono_font = QFontDatabase.applicationFontFamilies(mono_font_id)[0]
+        QFont(mono_font).setStyleHint(QFont.StyleHint.Monospace)
 
         # Add Material Symbols Outlined as icon theme
-        icon_path = str(get_resource_dir() / "MaterialSymbolsOutlined.ttf")
-        icon_font_id = QFontDatabase.addApplicationFont(icon_path)
-        if icon_font_id != -1:
-            icon_font = QFontDatabase.applicationFontFamilies(icon_font_id)[0]
-            QIcon.setThemeName(icon_font)
+        icon_font_id = add_font("symbols")
+        icon_font = QFontDatabase.applicationFontFamilies(icon_font_id)[0]
+        QIcon.setThemeName(icon_font)
 
         # Window setup
         self.setWindowTitle("JobTools")
@@ -68,12 +68,8 @@ class JobToolsApp(QMainWindow):
 
         # Apply stylesheet
         app = QApplication.instance()
-        theme_path = str(get_resource_dir() / f"theme_{get_sys_theme()}.xml")
-        qss_path = str(get_resource_dir() / "custom.qss")
-        light_extra = {"danger": "#DB3E03", "warning": "#977100", "success": "#008679"}
-        dark_extra = {"danger": "#FF8B69", "warning": "#D8A300", "success": "#48BDAE"}
-        extra = dark_extra if get_sys_theme() == "dark" else light_extra
-        apply_stylesheet(app, theme=theme_path, css_file=qss_path, extra=extra)
+        stylesheet = get_stylesheet()
+        app.setStyleSheet(stylesheet)
 
         # Initialize the config model
         cfg_model = ConfigModel()
@@ -139,7 +135,16 @@ class JobToolsApp(QMainWindow):
         btn.setIconSize(QSize(icon_size, icon_size))
         btn.setToolTip(page_name.capitalize())
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setProperty("class", "nav-button")
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                border: none;
+                padding: 10px;
+                background-color: transparent;
+                color: {self.colors['primaryTextColor']};
+            }}
+            QPushButton:hover {{ background-color: {self.colors['secondaryLightColor']}; }}
+            QPushButton:checked {{ background-color: {self.colors['secondaryColor']}; }}
+        """)
         # Add button to appropriate sidebar section
         if align_bottom:
             self.nav_panel.bottom.addWidget(btn)
@@ -166,7 +171,8 @@ class NavPanel(QFrame):
 
         # Sidebar Setup
         self.setFixedWidth(60)
-        self.setProperty("class", "sidebar")
+        self.setStyleSheet("border-top: none; border-bottom: none; \
+                            border-left: none; border-radius: 0px;")
         self.setLayout(QVBoxLayout(self))
         self.layout().setContentsMargins(0, 10, 0, 10)  # type: ignore
         self.layout().setSpacing(0)                     # type: ignore

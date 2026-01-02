@@ -1,0 +1,15 @@
+<RCC>
+  <qresource prefix="colors">
+    <file alias="dark.xml">colors/dark.xml</file>
+    <file alias="light.xml">colors/light.xml</file>
+  </qresource>
+  <qresource prefix="styles">
+    <file alias="dark.qss">styles/dark.qss</file>
+    <file alias="light.qss">styles/light.qss</file>
+  </qresource>
+  <qresource prefix="fonts">
+    <file alias="sans.ttf">fonts/Roboto.ttf</file>
+    <file alias="mono.ttf">fonts/RobotoMono.ttf</file>
+    <file alias="symbols.ttf">fonts/MaterialSymbolsOutlined.ttf</file>
+  </qresource>
+</RCC>

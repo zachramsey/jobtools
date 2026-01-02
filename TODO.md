@@ -8,5 +8,5 @@ I know these should be set up as issues. I'm not there yet :)
 - [Feature] Company exclusion (& requirement?)
 - [Feature] Job level selection via title/description parsing
 - [Feature] Job/company search functionality
-- [Enhancement] Find and display similar jobs on job details page
-- [Enhancement] Parse the "# years" qualifiers found among skills and experience
+- [Feature] Find and display similar jobs on job details page
+- [Feature] Parse the "# years" qualifiers found among skills and experience

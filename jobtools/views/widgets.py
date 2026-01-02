@@ -59,7 +59,7 @@ class QHeader(QWidget):
             help_btn.setIconSize(QSize(16, 16))
             help_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             help_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            help_btn.setProperty("class", "help-button")
+            help_btn.setStyleSheet("border: none; background-color: transparent; padding: 0px;")
             help_btn.setToolTip(tooltip)
             self.layout().addWidget(help_btn)   # type: ignore
         self.layout().setSizeConstraint(QHBoxLayout.SizeConstraint.SetFixedSize)  # type: ignore
@@ -458,7 +458,7 @@ class QChip(QWidget):
         else:
             self.btn.setIcon(get_icon("add"))
             self.btn.setIconSize(QSize(16, 16))
-        self.btn.setProperty("class", "chip")
+        self.btn.setStyleSheet("padding: 0 10px; border-radius: 18px;")
         self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         # Keep the button width tight to its contents:
