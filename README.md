@@ -18,9 +18,11 @@
 
 ---
 
-# Stable Release Download
+# Binary Release
 
-*Single-file releases are planned but not yet available.*
+Pre-release v1.0.0 beta is available [here](https://github.com/zachramsey/jobtools/releases/tag/v1-beta).
+
+*Feedback, suggestions, and bug reports are welcomed and appreciated!*
 
 # Install From Source
 
