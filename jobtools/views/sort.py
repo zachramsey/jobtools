@@ -35,11 +35,13 @@ class DegreeValueSelector(QWidget):
     def __init__(self):
         super().__init__()
         self.setLayout(QHBoxLayout(self))
+
         # Define preset degree values
         self.no_values = (0, 0, 0)
         self.ba_values = (5, -3, -3)
         self.ma_values = (0, 5, -3)
         self.phd_values = (0, 0, 5)
+
         # Layout for degree value spin boxes
         self.values_layout = QHBoxLayout()
         self.spin_ba = self.setup_spin_box("BA", 0)
@@ -48,6 +50,7 @@ class DegreeValueSelector(QWidget):
         self.values_layout.addWidget(self.spin_ma)
         self.spin_phd = self.setup_spin_box("PhD", 2)
         self.values_layout.addWidget(self.spin_phd)
+
         # Radio buttons for preset degree options
         self.radio_layout = QHBoxLayout()
         self.radio_none = self.setup_radio_button("None", self.no_values)
@@ -61,12 +64,14 @@ class DegreeValueSelector(QWidget):
         self.radio_layout.addWidget(self.radio_phd)
         self.radio_manual = self.setup_radio_button("Manual", (None, None, None))
         self.radio_layout.addWidget(self.radio_manual)
+
         # Set widths to the maximum of the radio buttons
         radio_buttons = [self.radio_none, self.radio_bachelors, self.radio_masters,
                          self.radio_phd, self.radio_manual]
         max_width = max([btn.sizeHint().width() for btn in radio_buttons])
         for btn in radio_buttons:
             btn.setFixedWidth(max_width)
+
         # Main layout
         self.layout().addLayout(self.radio_layout)
         self.layout().addLayout(self.values_layout)

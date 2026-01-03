@@ -51,8 +51,10 @@ class CollectionWorker(QObject):
         """
         try:
             t_init = time.time()
+
             # Signal that collection has started
             JobsDataModel.logger.info("Starting job collection...")
+
             # Run collection
             for i_qry, query in enumerate(self.queries):
                 for i_loc, location in enumerate(self.locations):
@@ -105,6 +107,7 @@ class CollectionWorker(QObject):
                             f"Query {i_qry+1:02d}, Location {i_loc+1:02d}"
                              " | No jobs found")
                         continue
+
                     # Filter out jobs older than hours_old
                     datetime = pd.to_datetime(jobs["date_posted"])
                     cutoff = dt.datetime.now() - dt.timedelta(hours=self.hours_old)
@@ -114,9 +117,11 @@ class CollectionWorker(QObject):
                         f"Query {i_qry+1:02d}, Location {i_loc+1:02d}"
                         f" | Collected: {len(jobs):>5}"
                         f" | Elapsed: {self.get_elapsed(t_start, time.time())}")
+
                     # Append to main data
                     self.data = pd.concat([self.data, jobs], ignore_index=True)
                     self.data.reset_index(drop=True, inplace=True)
+
                     # Check for cancellation
                     if self.cancel_event and self.cancel_event.is_set():
                         break
@@ -126,6 +131,7 @@ class CollectionWorker(QObject):
                 f"{"Summary":^21}"
                 f" | Collected: {len(self.data):>5}"
                 f" | Elapsed: {self.get_elapsed(t_init, time.time())}")
+
             # Emit finished signal
             time.sleep(1)  # Small delay to ensure UI updates
             if self.cancel_event and self.cancel_event.is_set():

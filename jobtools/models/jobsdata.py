@@ -93,8 +93,10 @@ class JobsDataModel(QAbstractTableModel):
 
         # Raw data storage
         self._original_df = pd.DataFrame([FOOBAR_DATA])
+
         # Intermediate data to be used in dynamic view
         self._active_df = pd.DataFrame()
+
         # Dynamic data view
         self._dynamic_df = pd.DataFrame()
 
@@ -195,6 +197,7 @@ class JobsDataModel(QAbstractTableModel):
         self.display_favorites = self._cfg_model.get_value("display_favorites")
         self.active_days = self._cfg_model.get_value("max_age_days")
         updated = self.__update_filters()
+
         # Update sort settings
         sites_selected = self._cfg_model.get_value("sites_selected")
         self.set_rank_order("site", sites_selected, "site_score")
@@ -208,6 +211,7 @@ class JobsDataModel(QAbstractTableModel):
         self.set_keyword_scores(unprioritized_terms, score=0)
         deprioritized_terms = self._cfg_model.get_value("deprioritized_terms_selected")
         self.set_keyword_scores(deprioritized_terms, score=-1)
+
         # Apply changes to data model
         self.beginResetModel()
         self.build_active_data()
@@ -220,16 +224,19 @@ class JobsDataModel(QAbstractTableModel):
         """Update data model filters from current config settings."""
         # Update filter settings
         updated = self.__update_filters()
+
         # Recent days filter
         recent_days = self._cfg_model.get_value("max_age_days")
         if recent_days != self.active_days:
             self.active_days = recent_days
             updated = True
+
         # Favorites filter
         display_favorites = self._cfg_model.get_value("display_favorites")
         if display_favorites != self.display_favorites:
             self.display_favorites = display_favorites
             updated = True
+
         # Apply changes to data model
         self.beginResetModel()
         self.build_active_data()
@@ -259,6 +266,7 @@ class JobsDataModel(QAbstractTableModel):
         val = self._cfg_model.get_value("deprioritized_terms_selected", top_left)
         if val is not None:
             self.set_keyword_scores(val, score=-1)
+
         # Apply changes to data model
         self.beginResetModel()
         self.apply_sort()
@@ -282,19 +290,24 @@ class JobsDataModel(QAbstractTableModel):
             self.logger.info("No new jobs collected.")
             return
         self._dynamic_df = jobs_data.copy()
+
         # Convert raw html descriptions to markdown
         self._dynamic_df["description"] = self._dynamic_df["description"].apply(
             lambda html: self._md_converter.convert(html)
                          if isinstance(html, str) and len(html) > 0 else html)
+
         # Initialize 'is_favorite' column
         self._dynamic_df["is_favorite"] = False
+
         # Ensure date_posted is in YYYY-MM-DD format
         self._dynamic_df["date_posted"] = pd.to_datetime(
             self._dynamic_df["date_posted"]).dt.strftime("%Y-%m-%d")
+
         # Remove placeholder data if present
         real_data_mask = self._original_df["id"] != FOOBAR_DATA["id"]
         if not real_data_mask.all():
             self._original_df = self._original_df[real_data_mask].reset_index(drop=True)
+
         # Aggregate duplicate jobs
         n_dyn_init = len(self._dynamic_df)
         n_orig_init = len(self._original_df)
@@ -304,14 +317,17 @@ class JobsDataModel(QAbstractTableModel):
         if n_dupl > 0:
             self.logger.info(f"Aggregated {n_dupl} duplicate job postings.")
         self.logger.info(f"Found {n_found} new job postings.")
+
         # Add to original data and update archive file
         archive_path = self._arch_path / "jobs_data.csv"
         self._original_df.to_csv(archive_path, index=False)
         self.logger.info(f"Archived updated with {len(self._original_df)} unique postings.")
+
         # Rebuild recent data and apply filters/sorting
         self.build_active_data()
         self.apply_filters()
         self.apply_sort()
+
         # Signal model reset complete
         self.endResetModel()
 
@@ -709,18 +725,21 @@ class JobsDataModel(QAbstractTableModel):
         """
         df = df.copy()
         agg_df = agg_df.copy()
+
         # Ensure list columns are of consistent type
         for col in JobsDataModel.LIST_COLS:
             if col in df.columns:
                 df[col] = df[col].astype(object)
             if col in agg_df.columns:
                 agg_df[col] = agg_df[col].astype(object)
+
         # Prepare list columns in both dataframes
         for data in [df, agg_df]:
             if not data.empty and not set(JobsDataModel.LIST_COL_NAMES).issubset(set(data.columns)):
                 for col in JobsDataModel.LIST_COLS:
                     if col in data.columns and f"{col}_list" not in data.columns:
                         data[f"{col}_list"] = data[col].apply(lambda x: [x] if pd.notna(x) else [])
+
         # Prepare dataframe for aggregation
         if df.empty and agg_df.empty:
             return pd.DataFrame()
@@ -736,6 +755,7 @@ class JobsDataModel(QAbstractTableModel):
                 df = df[df["_merge"] == "left_only"].drop(columns=["_merge"])
                 if df.empty:
                     return agg_df.reset_index(drop=True)    # No new unique jobs
+
         # Get relevant rows from existing data
         agg_df.reset_index(drop=True, inplace=True)
         affected_indices = set()
@@ -744,10 +764,12 @@ class JobsDataModel(QAbstractTableModel):
             if not new_keys.empty:
                 matches = agg_df[criteria].reset_index().merge(new_keys, on=criteria, how="inner")
                 affected_indices.update(matches["index"].tolist())
+
         # Separate affected and unaffected existing data
         is_active = agg_df.index.isin(affected_indices)
         agg_df_active, agg_df_static = agg_df[is_active], agg_df[~is_active]
         combined_df = pd.concat([df, agg_df_active], ignore_index=True)
+
         # Define aggregation rules
         agg_rules = {}
         for col in combined_df.columns:
@@ -759,9 +781,11 @@ class JobsDataModel(QAbstractTableModel):
                 agg_rules[col] = JobsDataModel._longest_desc    # type: ignore
             else:
                 agg_rules[col] = JobsDataModel._last_valid      # type: ignore
+
         # Aggregate duplicates
         for criteria in JobsDataModel.DUPL_CRIT:
             combined_df = combined_df.groupby(criteria, as_index=False, dropna=False).agg(agg_rules)
+
         # Recombine with unaffected existing data
         combined_df = pd.concat([combined_df, agg_df_static], ignore_index=True)
         return combined_df
@@ -771,8 +795,10 @@ class JobsDataModel(QAbstractTableModel):
         """Build derived columns in the DataFrame."""
         if df.empty:
             return df
+
         # Parse locations into city and state
         df["city"], df["state"] = zip(*df["location"].map(parse_location))
+
         # Add degree existence columns
         ba, ma, phd = zip(*df["description"].map(parse_degrees))
         df["has_ba"], df["has_ma"], df["has_phd"] = ba, ma, phd

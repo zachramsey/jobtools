@@ -24,6 +24,7 @@ class HoverTableView(QTableView):
         # Find which index the mouse is currently over
         pos = event.position().toPoint()
         index = self.indexAt(pos)
+
         # Change cursor if hovering over a linkable cell
         if index.isValid() and index.data(Qt.ItemDataRole.UserRole + 1):
             self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -39,10 +40,12 @@ class DataPage(QWidget):
                  config_model: ConfigModel,
                  data_model: JobsDataModel):
         super().__init__()
-        self.setLayout(QVBoxLayout(self))
         self._cfg_model = config_model
         self._data_model = data_model
         defaults: dict = {}
+
+        self.setLayout(QVBoxLayout(self))
+        self.layout().setSpacing(10)
 
         # Configure data model
         self._data_model.set_visible_columns([
@@ -81,6 +84,7 @@ class DataPage(QWidget):
         # Data table view
         self.table_view = HoverTableView()
         self.table_view.setModel(self._data_model)
+
         # self.table_view.setSortingEnabled(True)
         self.table_view.horizontalHeader().setDefaultAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)

@@ -61,12 +61,16 @@ class ConfigModel(QAbstractItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._root_item = TreeItem(["Property", "Value"])
+
         # Mapping of config keys to their QModelIndex
         self.idcs = {}
+
         # Default values for config keys
         self.defaults = {}
+
         # Path to persistent config file
         self._cfg_path = get_config_dir() / "persistent.json"
+
         # Auto-save on data change
         self.dataChanged.connect(lambda: self.save_to_file(self._cfg_path))
 
@@ -248,6 +252,7 @@ class ConfigModel(QAbstractItemModel):
         if item.child_count() == 0:
             # Leaf item -> return its value
             return item.data(1)
+
         # Item has children -> go deeper
         result = {}
         for i in range(item.child_count()):

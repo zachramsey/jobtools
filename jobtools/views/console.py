@@ -56,6 +56,7 @@ class ConsolePage(QWidget):
         """Handle text coming from logger."""
         if not text.strip():
             return
+
         # Append text to log output
         self.log_output.append(text)
         sb = self.log_output.verticalScrollBar()

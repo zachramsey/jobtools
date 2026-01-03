@@ -153,6 +153,7 @@ class QPlainTextListEdit(QWidget):
             - btn_layout: QHBoxLayout
             - delete_btn: QPushButton
         """
+
         # start with a single inactive editor
         self._add_editor_row()
 
@@ -162,23 +163,27 @@ class QPlainTextListEdit(QWidget):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
+
         # Create text editor
         editor = QAdaptivePlainTextEdit()
         editor.setPlainText(self._placeholder_text)
         editor.setReadOnly(True)
         editor.installEventFilter(self)
         row_layout.addWidget(editor)
+
         # Create button container
         btn_container = QWidget()
         btn_layout = QHBoxLayout(btn_container)
         btn_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.addWidget(btn_container, alignment=Qt.AlignmentFlag.AlignTop)
+
         # Create delete button
         delete_btn = QPushButton("Delete")
         delete_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         delete_btn.setVisible(False)
         delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_layout.addWidget(delete_btn)
+
         # Add row to main layout
         self.layout().addWidget(row_widget)
         row = {"container": row_widget,
@@ -187,6 +192,7 @@ class QPlainTextListEdit(QWidget):
                "btn_layout": btn_layout,
                "delete_btn": delete_btn}
         self.rows.append(row)
+
         # Connect delete button
         delete_btn.clicked.connect(lambda _, r=row: self._on_delete(r))
 
@@ -206,12 +212,14 @@ class QPlainTextListEdit(QWidget):
                 if row["editor"].toPlainText() == self._placeholder_text:
                     # Clear placeholder text
                     row["editor"].setPlainText("")
+
                 # Show delete button
                 row["delete_btn"].setVisible(True)
                 self._restore_delete_button(row)
                 if self.rows and self.rows[-1]["editor"] is watched:
                     # Last row activated -> Add new inactive row
                     self._add_editor_row()
+
         # Handle Content Change
         if isinstance(watched, QPlainTextEdit) and event.type() == QEvent.Type.KeyRelease:
             self.itemsChanged.emit(self.get_items())
@@ -222,6 +230,7 @@ class QPlainTextListEdit(QWidget):
         """Handle delete button click for a row."""
         if row not in self.rows:
             return
+
         # Replace delete button with confirm/cancel buttons
         self._clear_layout(row["btn_layout"])
         confirm_btn = QPushButton("Confirm")
@@ -243,6 +252,7 @@ class QPlainTextListEdit(QWidget):
         try:
             # Clear focus from editor if needed
             row["editor"].clearFocus()
+
             # Remove row from layout and schedule deletion
             self.layout().removeWidget(row["container"])
         except Exception:
@@ -263,6 +273,7 @@ class QPlainTextListEdit(QWidget):
             last_editor = self.rows[-1]["editor"]
             if not last_editor.isReadOnly():
                 self._add_editor_row()
+
         # Emit items changed signal
         self.itemsChanged.emit(self.get_items())
 
@@ -461,8 +472,8 @@ class QChip(QWidget):
         self.btn.setStyleSheet("padding: 0 10px; border-radius: 18px;")
         self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        # Keep the button width tight to its contents:
         self.btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+
         # Keep visual selection state consistent with provided value
         if self.mode == ChipMode.STANDARD:
             self.btn.setCheckable(True)
@@ -591,25 +602,32 @@ class QChipSelect(QWidget):
         self.base_items = base_items
         self.creator_chip: QChip|None = None
         self.setLayout(QVBoxLayout(self))
+
         # Container for selected chips
         self.selected_container = QWidget()
         self.selected_layout = QFlowLayout(self.selected_container)
-        self.layout().addWidget(self.selected_container)        # type: ignore
+        self.layout().addWidget(self.selected_container)
+
         # Divider
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
-        self.layout().addWidget(line)                           # type: ignore
+        self.layout().addWidget(line)
+
         # Container for available chips
         self.available_container = QWidget()
         self.available_layout = QFlowLayout(self.available_container)
-        self.layout().addWidget(self.available_container)       # type: ignore
+        self.layout().addWidget(self.available_container)
+
         # Initialization
         if base_items:
             for text in base_items:
                 self.add_standard_chip(text, self.available_layout)
         if enable_creator:
             self.add_creator_chip()
+
+    def layout(self) -> QVBoxLayout:
+        return super().layout()  # type: ignore
 
     def add_standard_chip(self, text: str,
                           target_layout: QFlowLayout,
@@ -623,6 +641,7 @@ class QChipSelect(QWidget):
         chip.clicked.connect(lambda: self._on_move_chip(chip))
         chip.delete_requested.connect(self._on_delete_chip)
         target_layout.addWidget(chip)
+
         # Keep the button's checked state consistent with `selected`
         if chip.mode == ChipMode.STANDARD:
             chip.btn.setChecked(selected)
@@ -638,6 +657,7 @@ class QChipSelect(QWidget):
         # Add new standard chip to selected layout
         self.add_standard_chip(text, self.selected_layout,
                                selected=True, is_custom=True)
+
         # Emit selection changed signal
         self.selectionChanged.emit(self.get_selected())
 
@@ -782,22 +802,28 @@ class QCheckBoxSelect(QWidget):
         """
         super().__init__()
         self.setLayout(QHBoxLayout(self))
+
         # Create checkbox for each label
         self.checkboxes: dict[str, QCheckBox] = {}
         for label in labels:
             cb = QCheckBox(label)
             cb.setCursor(Qt.CursorShape.PointingHandCursor)
             cb.clicked.connect(self._on_change)
-            self.layout().addWidget(cb)     # type: ignore
+            self.layout().addWidget(cb)
             self.checkboxes[label] = cb
+
         # Set checkbox widths to the maximum content width
         max_width = 0
         for cb in self.checkboxes.values():
             max_width = max(max_width, cb.sizeHint().width())
         for cb in self.checkboxes.values():
             cb.setFixedWidth(max_width + 5)
+
         # Push content to the left
-        self.layout().addStretch()          # type: ignore
+        self.layout().addStretch()
+
+    def layout(self) -> QHBoxLayout:
+        return super().layout()  # type: ignore
 
     @Slot()
     def _on_change(self):

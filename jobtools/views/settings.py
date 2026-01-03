@@ -144,13 +144,17 @@ class SettingsPage(QWidget):
             return
         config_name = config_name.replace(" ", "_").lower()
         config_path = get_config_dir() / f"{config_name}.json"
+
         # Temporarily disconnect to avoid triggering updates
         self._cfg_model.dataChanged.disconnect(self._data_model._on_config_changed)
+
         # Load config and update data model
         self._cfg_model.load_from_file(config_path)
         self._data_model.init_config()
+
         # Reconnect signal
         self._cfg_model.dataChanged.connect(self._data_model._on_config_changed)
+
         # Update config edit box
         self.config_edit.setText(config_name)
 
@@ -171,6 +175,7 @@ class SettingsPage(QWidget):
         config_name = config_name.replace(" ", "_").lower()
         config_path = get_config_dir() / f"{config_name}.json"
         self._cfg_model.save_to_file(config_path)
+
         # Update config selector
         temp = self.config_select.currentText()
         self.config_select.clear()

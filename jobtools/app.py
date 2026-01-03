@@ -96,14 +96,17 @@ class JobToolsApp(QMainWindow):
         # Go to console page when collection starts
         data_model.collectStarted.connect(
             lambda: self.nav_panel.btn_group.buttons()[4].click())
+
         # Go to data page when collection finishes
         data_model.collectFinished.connect(
             lambda: self.nav_panel.btn_group.buttons()[0].click())
 
         # Load config from last session
         cfg_model.load_last_config()
+
         # Initialize data model with config values
         data_model.init_config()
+
         # Connect config model to data model updates
         cfg_model.dataChanged.connect(data_model._on_config_changed)
 
@@ -145,13 +148,16 @@ class JobToolsApp(QMainWindow):
             QPushButton:hover {{ background-color: {self.colors['secondaryLightColor']}; }}
             QPushButton:checked {{ background-color: {self.colors['secondaryColor']}; }}
         """)
+
         # Add button to appropriate sidebar section
         if align_bottom:
             self.nav_panel.bottom.addWidget(btn)
         else:
             self.nav_panel.top.addWidget(btn)
+
         # Add button to group
         self.nav_panel.btn_group.addButton(btn)
+
         # Add page to stacked widget
         scrollable = QScrollArea()
         scrollable.setWidgetResizable(True)
@@ -174,8 +180,8 @@ class NavPanel(QFrame):
         self.setStyleSheet("border-top: none; border-bottom: none; \
                             border-left: none; border-radius: 0px;")
         self.setLayout(QVBoxLayout(self))
-        self.layout().setContentsMargins(0, 10, 0, 10)  # type: ignore
-        self.layout().setSpacing(0)                     # type: ignore
+        self.layout().setContentsMargins(0, 10, 0, 10)
+        self.layout().setSpacing(0)
 
         # Top Section
         self.top = QVBoxLayout()
@@ -188,14 +194,17 @@ class NavPanel(QFrame):
         self.bottom.setContentsMargins(0,0,0,0)
 
         # Assemble Sidebar (Top/<->/Bottom)
-        self.layout().addLayout(self.top)               # type: ignore
-        self.layout().addStretch()                      # type: ignore
-        self.layout().addLayout(self.bottom)            # type: ignore
+        self.layout().addLayout(self.top)
+        self.layout().addStretch()
+        self.layout().addLayout(self.bottom)
 
         # Navigation Button Group
         self.btn_group = QButtonGroup(self)
         self.btn_group.setExclusive(True)
         self.btn_group.buttonClicked.connect(self._on_nav_button_clicked)
+
+    def layout(self) -> QVBoxLayout:
+        return super().layout()  # type: ignore
 
     @Slot()
     def _on_nav_button_clicked(self, btn):

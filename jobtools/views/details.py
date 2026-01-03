@@ -59,6 +59,7 @@ class JobDetails(QDialog):
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.setSpacing(5)
         layout.addSpacing(10)
+
         # Job Source Links
         source = QHBoxLayout()
         job_url_str = job_data.get("job_url", "")
@@ -74,20 +75,24 @@ class JobDetails(QDialog):
         source.addStretch()
         layout.addLayout(source)
         layout.addSpacing(10)
+
         # Job Title
         title_label = QLabel(f"<h2>{job_data.get('title', 'Unknown Job Title')}</h2>")
         title_label.setWordWrap(True)
         layout.addWidget(title_label)
+
         # Job Function
         if function_str := job_data.get("job_function"):
             if function_str != "other":
                 function_label = QLabel(f"<i>{function_str}</i>")
                 layout.addWidget(function_label)
         layout.addSpacing(10)
+
         # Company Name
         company_label = job_data.get("company", "Unknown Company")
         layout.addWidget(QLabel(company_label))
         layout.addSpacing(10)
+
         # Location and Work Model
         location_info = QHBoxLayout()
         location_label = QLabel(job_data.get("location", "Unknown Location"))
@@ -97,17 +102,20 @@ class JobDetails(QDialog):
         location_info.addStretch()
         layout.addLayout(location_info)
         layout.addSpacing(10)
+
         # Job Type
         if job_type := job_data.get("job_type"):
             type_label = QLabel(f"{job_type.title()}")
             layout.addWidget(type_label)
             layout.addSpacing(10)
+
         # Job Level
         if job_level := job_data.get("job_level"):
             if job_level != "not applicable":
                 level_label = QLabel(f"{job_level.title()}")
                 layout.addWidget(level_label)
                 layout.addSpacing(10)
+
         # Compensation
         compensation_low = job_data.get("min_amount")
         compensation_high = job_data.get("max_amount")
@@ -131,11 +139,13 @@ class JobDetails(QDialog):
             width = min(int(self.parentWidget().width() * scale), 800)
             height = int(self.parentWidget().height() * scale)
             self.setFixedSize(width, height)
+
             # Calculate center coordinates of parent
             par_geo = self.parentWidget().geometry()
             par_pos = self.parentWidget().mapToGlobal(QPoint(0, 0))
             center_x = par_pos.x() + (par_geo.width() // 2)
             center_y = par_pos.y() + (par_geo.height() // 2)
+
             # Center the dialog relative to parent
             dialog_x = center_x - (width // 2)
             dialog_y = center_y - (height // 2)
@@ -150,6 +160,7 @@ class CompanyDetails(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Company Details")
         self.setLayout(QVBoxLayout(self))
+
         # Links
         links_layout = QHBoxLayout()
         if company_url := company_data.get("company_url"):
@@ -164,6 +175,7 @@ class CompanyDetails(QDialog):
         links_layout.addStretch()
         self.layout().addLayout(links_layout)
         self.layout().addSpacing(10)
+
         # Name and logo
         company_header = QHBoxLayout()
         if logo_url := company_data.get("company_logo"):
@@ -177,18 +189,21 @@ class CompanyDetails(QDialog):
         name_label.setAlignment(Qt.AlignmentFlag.AlignBottom)
         company_header.addWidget(name_label)
         self.layout().addLayout(company_header)
+
         # Industry
         if industry := company_data.get("company_industry"):
             industry_label = QLabel(f"<i>{industry}</i>")
             industry_label.setWordWrap(True)
             self.layout().addWidget(industry_label)
             self.layout().addSpacing(10)
+
         # Description
         if description := company_data.get("company_description"):
             description_view = QLabel(description)
             description_view.setWordWrap(True)
             self.layout().addWidget(description_view)
             self.layout().addSpacing(10)
+
         # Details
         num_employees = company_data.get("company_num_employees")
         revenue = company_data.get("company_revenue")
@@ -214,11 +229,13 @@ class CompanyDetails(QDialog):
             width = 400
             height = self.height()
             self.setFixedSize(width, height)
+
             # Calculate center coordinates of parent
             par_geo = self.parentWidget().geometry()
             par_pos = self.parentWidget().mapToGlobal(QPoint(0, 0))
             center_x = par_pos.x() + (par_geo.width() // 2)
             center_y = par_pos.y() + (par_geo.height() // 2)
+
             # Center the dialog relative to parent
             dialog_x = center_x - (width // 2)
             dialog_y = center_y - (height // 2)

@@ -170,19 +170,23 @@ class CollectPage(QWidget):
             self.run_btn.setProperty("class", "danger")
             self.run_btn.style().unpolish(self.run_btn)
             self.run_btn.style().polish(self.run_btn)
+
             # Setup data collection worker
             self._cancel_event = Event()
             self.worker = CollectionWorker(self._cfg_model, self._cancel_event)
             self.worker_thread = QThread()
             self.worker.moveToThread(self.worker_thread)
+
             # Connect signals and slots
             self.worker_thread.started.connect(self.worker.run)
             self.worker_thread.finished.connect(self.worker_thread.deleteLater)
             self.worker.finished.connect(self.worker_thread.quit)
             self.worker.finished.connect(self.worker.deleteLater)
+
             # Connect worker signals to callbacks
             self.worker.finished.connect(self._on_collection_finished)
             self.worker.error.connect(self._on_collection_error)
+
             # Start thread
             self._data_model.collectStarted.emit()
             self.worker_thread.start()
