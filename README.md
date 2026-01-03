@@ -32,8 +32,8 @@ Pre-release v1.0.0 beta is available [here](https://github.com/zachramsey/jobtoo
 
 ```bash
 # Clone the repository with git
-git clone https://github.com/yourusername/yourproject.git
-cd yourproject
+git clone https://github.com/zachramsey/jobtools.git
+cd jobtools
 ```
 
 \~*OR*\~
