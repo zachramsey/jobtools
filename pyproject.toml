@@ -10,6 +10,9 @@ dependencies = [
     "qt-material>=2.17",
 ]
 
+[tool.pyside6-project]
+files = ["main.py"]
+
 ########################
 ## Ruff Configuration ##
 ########################
