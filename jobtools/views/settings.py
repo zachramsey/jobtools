@@ -1,8 +1,9 @@
-from PySide6.QtCore import QModelIndex, QSize, Qt, Slot
+from PySide6.QtCore import QModelIndex, QSize, Qt, QUrl, Slot
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from ..models import ConfigModel, JobsDataModel
-from ..utils import get_config_dir, get_icon
+from ..utils import get_config_dir, get_data_dir, get_icon
 from .widgets import QHeader
 
 LC_TT = """Load a saved configuration from file.
@@ -30,6 +31,22 @@ class SettingsPage(QWidget):
 
         self.setLayout(QVBoxLayout(self))
         self.layout().setSpacing(20)
+
+        # Open directories
+        dir_layout = QHBoxLayout()
+        dir_header = QHeader("Open Directory")
+        dir_header.setFixedWidth(250)
+        dir_layout.addWidget(dir_header)
+        self.config_dir_btn = QPushButton("Configs")
+        self.config_dir_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.config_dir_btn.clicked.connect(lambda: self._on_open_dir(str(get_config_dir())))
+        dir_layout.addWidget(self.config_dir_btn)
+        self.data_dir_btn = QPushButton("Data")
+        self.data_dir_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.data_dir_btn.clicked.connect(lambda: self._on_open_dir(str(get_data_dir())))
+        dir_layout.addWidget(self.data_dir_btn)
+        dir_layout.addStretch()
+        self.layout().addLayout(dir_layout)
 
         # Load configuration
         load_layout = QHBoxLayout()
@@ -111,6 +128,13 @@ class SettingsPage(QWidget):
         val = self._cfg_model.get_value("proxy", top_left)
         if val is not None and val != self.p_editor.text().strip():
             self.p_editor.setText(val)
+
+    @Slot(str)
+    def _on_open_dir(self, directory: str):
+        """Open the specified directory in the system file explorer."""
+        url = QUrl.fromLocalFile(directory)
+        if not QDesktopServices.openUrl(url):
+            self._data_model.logger.error(f"Failed to open directory: {directory}")
 
     @Slot(str)
     def _on_load_config(self):
