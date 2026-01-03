@@ -8,8 +8,8 @@
     <file alias="light.qss">styles/light.qss</file>
   </qresource>
   <qresource prefix="fonts">
-    <file alias="sans.ttf">fonts/Roboto.ttf</file>
-    <file alias="mono.ttf">fonts/RobotoMono.ttf</file>
+    <file alias="sans.ttf">fonts/NotoSans.ttf</file>
+    <file alias="mono.ttf">fonts/NotoSansMono.ttf</file>
     <file alias="symbols.ttf">fonts/MaterialSymbolsOutlined.ttf</file>
   </qresource>
 </RCC>
