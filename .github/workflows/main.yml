@@ -31,6 +31,10 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Generate resource data files
+        run: |
+          python jobtools/resources/generate.py
+
       - name: Build Executable
         uses: Nuitka/Nuitka-Action@main
         with:
